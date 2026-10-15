@@ -21,6 +21,11 @@ public interface BorderRenderer {
         return true;
     }
 
+    /** True if trusted members should see their own border even without /claim show. */
+    default boolean showsTrustedByDefault() {
+        return false;
+    }
+
     /** Horizontal radius (blocks) around a viewer in which edges are collected for {@link #render}. */
     int radius();
 

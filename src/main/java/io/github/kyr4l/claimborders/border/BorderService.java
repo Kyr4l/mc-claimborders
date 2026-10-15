@@ -22,7 +22,6 @@ import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -35,7 +34,7 @@ import java.util.function.Consumer;
 public final class BorderService implements Listener {
 
     private final ClaimBordersPlugin plugin;
-    private final Set<UUID> showing = new HashSet<>();
+    private final Set<UUID> showing;
     private BorderRenderer renderer;
     private BukkitTask task;
     private final Consumer<ClaimManager.ClaimChange> claimListener = change -> {
@@ -44,8 +43,9 @@ public final class BorderService implements Listener {
         }
     };
 
-    public BorderService(ClaimBordersPlugin plugin) {
+    public BorderService(ClaimBordersPlugin plugin, Set<UUID> showing) {
         this.plugin = plugin;
+        this.showing = showing;
     }
 
     public void start() {
@@ -74,7 +74,6 @@ public final class BorderService implements Listener {
             renderer.shutdown();
             renderer = null;
         }
-        showing.clear();
     }
 
     private BorderRenderer createRenderer(ClaimConfig cfg) {
@@ -162,7 +161,7 @@ public final class BorderService implements Listener {
             return List.of();
         }
         ClaimManager claims = plugin.claims();
-        boolean showing = isShowing(player);
+        boolean showing = isShowing(player) || (renderer != null && renderer.showsTrustedByDefault());
         double px = loc.getX();
         double pz = loc.getZ();
         double r2 = (double) radius * radius;

@@ -9,7 +9,9 @@ import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -19,6 +21,9 @@ import java.util.Set;
 public final class ParticleRenderer implements BorderRenderer {
 
     private record Corner(int x, int z) {
+    }
+
+    private record Line(int x1, int z1, int x2, int z2) {
     }
 
     private final ClaimBordersPlugin plugin;
@@ -64,7 +69,14 @@ public final class ParticleRenderer implements BorderRenderer {
         int span = cfg.particleVerticalSpan();
         Set<Corner> posts = new HashSet<>();
 
+        // Two claims facing each other share one line; draw it once, in the "foreign" colour if either is foreign.
+        Map<Line, EdgeView> lines = new LinkedHashMap<>();
         for (EdgeView view : edges) {
+            BoundaryEdge e = view.edge();
+            lines.merge(new Line(e.x1(), e.z1(), e.x2(), e.z2()), view, (a, b) -> a.trusted() ? b : a);
+        }
+
+        for (EdgeView view : lines.values()) {
             BoundaryEdge edge = view.edge();
             Object data = view.trusted() ? ownData : foreignData;
             for (int layer : cfg.particleLayers()) {

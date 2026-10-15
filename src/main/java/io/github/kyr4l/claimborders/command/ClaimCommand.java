@@ -16,8 +16,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
 
 /** /claim and its aliases. */
 public final class ClaimCommand implements TabExecutor {
@@ -141,32 +140,41 @@ public final class ClaimCommand implements TabExecutor {
             p.sendMessage(Text.color("&cYou do not own any chunk yet. Claim one first."));
             return;
         }
-        OfflinePlayer target = resolve(args[1]);
-        if (target == null) {
-            p.sendMessage(Text.color("&cUnknown player &f" + args[1] + "&c."));
-            return;
-        }
-        String name = target.getName() == null ? args[1] : target.getName();
-        if (add) {
-            if (target.getUniqueId().equals(p.getUniqueId())) {
-                p.sendMessage(Text.color("&7You are already the owner."));
+        resolve(args[1], target -> {
+            if (!p.isOnline()) {
                 return;
             }
-            if (claims().trust(claim, target.getUniqueId())) {
-                p.sendMessage(cfg().msg("trusted", "player", name));
-            } else {
-                p.sendMessage(Text.color("&7" + name + " is already trusted."));
+            if (target == null) {
+                p.sendMessage(Text.color("&cUnknown player &f" + args[1] + "&c."));
+                return;
             }
-        } else {
-            if (claims().untrust(claim, target.getUniqueId())) {
-                p.sendMessage(cfg().msg("untrusted", "player", name));
+            String name = target.getName() == null ? args[1] : target.getName();
+            if (add) {
+                if (target.getUniqueId().equals(p.getUniqueId())) {
+                    p.sendMessage(Text.color("&7You are already the owner."));
+                    return;
+                }
+                if (claims().trust(claim, target.getUniqueId(), name)) {
+                    p.sendMessage(cfg().msg("trusted", "player", name));
+                } else {
+                    p.sendMessage(Text.color("&7" + name + " is already trusted."));
+                }
             } else {
-                p.sendMessage(Text.color("&7" + name + " was not trusted."));
+                if (claims().untrust(claim, target.getUniqueId())) {
+                    p.sendMessage(cfg().msg("untrusted", "player", name));
+                } else {
+                    p.sendMessage(Text.color("&7" + name + " was not trusted."));
+                }
             }
-        }
-        if (target instanceof Player online) {
-            plugin.borders().refresh(online);
-        }
+            Player online = Bukkit.getPlayer(target.getUniqueId());
+            if (online != null) {
+                plugin.borders().refresh(online);
+                Claim here = claims().getClaimAt(online.getLocation());
+                if (!add && here == claim && !online.hasPermission("claimborders.bypass")) {
+                    plugin.entryGuard().eject(online, claim);
+                }
+            }
+        });
     }
 
     private void trustList(Player p) {
@@ -175,7 +183,7 @@ public final class ClaimCommand implements TabExecutor {
             p.sendMessage(Text.color("&7Nobody is trusted in your claim."));
             return;
         }
-        p.sendMessage(Text.color("&bTrusted: &f" + claim.getTrusted().stream().map(ClaimCommand::nameOf).collect(Collectors.joining(", "))));
+        p.sendMessage(Text.color("&bTrusted: &f" + String.join(", ", claim.getTrustedNames().values())));
     }
 
     private void info(Player p) {
@@ -270,9 +278,10 @@ public final class ClaimCommand implements TabExecutor {
                     sender.sendMessage(Text.color("&cUsage: /claim admin unclaimall <player>"));
                     return true;
                 }
-                OfflinePlayer target = resolve(args[2]);
-                int n = target == null ? 0 : claims().unclaimAll(target.getUniqueId());
-                sender.sendMessage(Text.color("&eReleased &f" + n + "&e chunk(s)."));
+                resolve(args[2], target -> {
+                    int n = target == null ? 0 : claims().unclaimAll(target.getUniqueId());
+                    sender.sendMessage(Text.color("&eReleased &f" + n + "&e chunk(s)."));
+                });
             }
             default -> sender.sendMessage(Text.color("&b/claim admin unclaim|unclaimall <player>|reload|stats"));
         }
@@ -284,19 +293,22 @@ public final class ClaimCommand implements TabExecutor {
         return limit == Integer.MAX_VALUE ? "∞" : String.valueOf(limit);
     }
 
-    private static String nameOf(UUID id) {
-        String name = Bukkit.getOfflinePlayer(id).getName();
-        return name == null ? id.toString().substring(0, 8) : name;
-    }
-
+    /**
+     * Resolves a name to a player. Online players answer immediately; otherwise the profile lookup (network +
+     * disk) runs off the main thread and the callback is invoked back on it. The callback gets null if unknown.
+     */
     @SuppressWarnings("deprecation")
-    private static OfflinePlayer resolve(String name) {
+    private void resolve(String name, Consumer<OfflinePlayer> callback) {
         Player online = Bukkit.getPlayerExact(name);
         if (online != null) {
-            return online;
+            callback.accept(online);
+            return;
         }
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
-        return offline.hasPlayedBefore() || offline.getName() != null ? offline : null;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
+            boolean known = offline.hasPlayedBefore() || offline.getName() != null;
+            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(known ? offline : null));
+        });
     }
 
     @Override

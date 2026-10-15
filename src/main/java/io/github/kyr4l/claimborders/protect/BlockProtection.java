@@ -12,17 +12,24 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.block.BlockState;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockMultiPlaceEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
+import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketEntityEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.entity.PlayerLeashEntityEvent;
+import org.bukkit.event.player.PlayerShearEntityEvent;
 
 /**
  * Block and entity protection against non-trusted players.
@@ -51,7 +58,7 @@ public final class BlockProtection implements Listener {
     }
 
     private void tell(Player p, Claim claim) {
-        plugin.sendCooled(p, cfg().msg("action-denied", "owner", claim.getOwnerName()));
+        plugin.sendCooled(p, "action", cfg().msg("action-denied", "owner", claim.getOwnerName()));
     }
 
     // ---- blocks ----------------------------------------------------------
@@ -71,6 +78,39 @@ public final class BlockProtection implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent e) {
         if (!cfg().protectBlocks()) {
+            return;
+        }
+        Claim c = denied(e.getPlayer(), e.getBlock().getLocation());
+        if (c == null && e instanceof BlockMultiPlaceEvent multi) {
+            // Beds, doors, tall plants: the second half may land across the border.
+            for (BlockState state : multi.getReplacedBlockStates()) {
+                c = denied(e.getPlayer(), state.getLocation());
+                if (c != null) {
+                    break;
+                }
+            }
+        }
+        if (c != null) {
+            e.setCancelled(true);
+            tell(e.getPlayer(), c);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityPlace(EntityPlaceEvent e) {
+        if (!cfg().protectBlocks() || e.getPlayer() == null) {
+            return;
+        }
+        Claim c = denied(e.getPlayer(), e.getBlock().getLocation());
+        if (c != null) {
+            e.setCancelled(true);
+            tell(e.getPlayer(), c);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onHangingPlace(HangingPlaceEvent e) {
+        if (!cfg().protectBlocks() || e.getPlayer() == null) {
             return;
         }
         Claim c = denied(e.getPlayer(), e.getBlock().getLocation());
@@ -189,6 +229,42 @@ public final class BlockProtection implements Listener {
             return;
         }
         Claim c = denied(e.getPlayer(), e.getRightClicked().getLocation());
+        if (c != null) {
+            e.setCancelled(true);
+            tell(e.getPlayer(), c);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBucketEntity(PlayerBucketEntityEvent e) {
+        if (!cfg().protectEntities()) {
+            return;
+        }
+        Claim c = denied(e.getPlayer(), e.getEntity().getLocation());
+        if (c != null) {
+            e.setCancelled(true);
+            tell(e.getPlayer(), c);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onShear(PlayerShearEntityEvent e) {
+        if (!cfg().protectEntities()) {
+            return;
+        }
+        Claim c = denied(e.getPlayer(), e.getEntity().getLocation());
+        if (c != null) {
+            e.setCancelled(true);
+            tell(e.getPlayer(), c);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onLeash(PlayerLeashEntityEvent e) {
+        if (!cfg().protectEntities()) {
+            return;
+        }
+        Claim c = denied(e.getPlayer(), e.getEntity().getLocation());
         if (c != null) {
             e.setCancelled(true);
             tell(e.getPlayer(), c);

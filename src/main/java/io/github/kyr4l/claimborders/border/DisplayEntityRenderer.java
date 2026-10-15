@@ -16,6 +16,7 @@ import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -77,6 +78,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     private final Map<UUID, Set<Run>> runsByOwner = new HashMap<>();
     private final Map<BoundaryEdge, Run> runByEdge = new HashMap<>();
     private final Map<UUID, Set<UUID>> shownNear = new HashMap<>();
+    private BukkitTask healTask;
 
     public DisplayEntityRenderer(ClaimBordersPlugin plugin, BorderService service) {
         this.plugin = plugin;
@@ -90,6 +92,24 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         for (Claim claim : plugin.claims().getClaims()) {
             syncClaim(claim);
         }
+        // Panels killed by /kill @e, clear-lag plugins or missed chunk events come back within a few minutes.
+        healTask = Bukkit.getScheduler().runTaskTimer(plugin, this::heal, 20L * 60, 20L * 60 * 3);
+    }
+
+    private void heal() {
+        for (Set<Run> runs : runsByOwner.values()) {
+            for (Run run : runs) {
+                UUID id = entities.get(run);
+                if ((id == null || Bukkit.getEntity(id) == null) && run.originChunk().isLoaded()) {
+                    spawnRun(run);
+                }
+            }
+        }
+    }
+
+    @Override
+    public boolean showsTrustedByDefault() {
+        return !plugin.settings().displayHideFromTrusted();
     }
 
     @Override
@@ -172,9 +192,12 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     private void applyVisibility(Player player, UUID entityId, Claim claim) {
         Entity e = Bukkit.getEntity(entityId);
-        if (e == null) {
-            return;
+        if (e != null) {
+            applyVisibility(player, e, claim);
         }
+    }
+
+    private void applyVisibility(Player player, Entity e, Claim claim) {
         boolean visible;
         if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.NEAR) {
             visible = false; // revealed by render() when close
@@ -213,12 +236,15 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         if (claim == null) {
             return;
         }
-        for (Run run : runsByOwner.getOrDefault(claim.getOwner(), Set.of())) {
-            UUID id = entities.get(run);
-            if (run.originChunk().equals(key) && (id == null || Bukkit.getEntity(id) == null)) {
-                spawnRun(run);
+        // Spawn a tick later: during ChunkLoadEvent the chunk's entity storage may not be ready yet.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (Run run : runsByOwner.getOrDefault(claim.getOwner(), Set.of())) {
+                UUID id = entities.get(run);
+                if (run.originChunk().equals(key) && (id == null || Bukkit.getEntity(id) == null)) {
+                    spawnRun(run);
+                }
             }
-        }
+        });
     }
 
     @Override
@@ -392,31 +418,35 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
 
         Location loc = new Location(world, x, originY, z);
-        BlockDisplay display = world.spawn(loc, BlockDisplay.class);
-        display.setBlock(cfg.displayMaterial().createBlockData());
-        display.setTransformation(new Transformation(new Vector3f(0f, translationY, 0f), new Quaternionf(), scale, new Quaternionf()));
-        display.setBrightness(new Display.Brightness(15, 15));
-        // Culling box is centred on the origin horizontally and starts at the origin vertically.
-        display.setDisplayWidth(2f * run.length() * 16f + 4f);
-        display.setDisplayHeight(aboveOrigin + 1f);
-        // The client draws a display entity only within viewRange * 64 blocks of its origin, measured in 3D.
-        display.setViewRange(Math.max(2f, Math.min(16f, (aboveOrigin + run.length() * 16f + 128f) / 64f)));
-        display.setPersistent(false);
-        display.setInvulnerable(true);
-        display.setSilent(true);
-        display.setGravity(false);
-        if (cfg.displayGlow()) {
-            display.setGlowing(true);
-            display.setGlowColorOverride(cfg.displayGlowColor());
-        }
-        display.getPersistentDataContainer().set(tag, PersistentDataType.STRING,
-                run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
-        entities.put(run, display.getUniqueId());
-
         Claim claim = plugin.claims().getClaimOf(run.owner());
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            applyVisibility(p, display.getUniqueId(), claim);
-        }
+        final float fTranslationY = translationY;
+        final float fAboveOrigin = aboveOrigin;
+        // Configure before the entity is added to the world: one spawn packet with the final state, and the
+        // per-player hide decisions are already in place, so nobody sees a one-tick flash.
+        BlockDisplay display = world.spawn(loc, BlockDisplay.class, (java.util.function.Consumer<BlockDisplay>) d -> {
+            d.setBlock(cfg.displayMaterial().createBlockData());
+            d.setTransformation(new Transformation(new Vector3f(0f, fTranslationY, 0f), new Quaternionf(), scale, new Quaternionf()));
+            d.setBrightness(new Display.Brightness(15, 15));
+            // Culling box is centred on the origin horizontally and starts at the origin vertically.
+            d.setDisplayWidth(2f * run.length() * 16f + 4f);
+            d.setDisplayHeight(fAboveOrigin + 1f);
+            // The client draws a display entity only within viewRange * 64 blocks of its origin, measured in 3D.
+            d.setViewRange(Math.max(2f, Math.min(16f, (fAboveOrigin + run.length() * 16f + 128f) / 64f)));
+            d.setPersistent(false);
+            d.setInvulnerable(true);
+            d.setSilent(true);
+            d.setGravity(false);
+            if (cfg.displayGlow()) {
+                d.setGlowing(true);
+                d.setGlowColorOverride(cfg.displayGlowColor());
+            }
+            d.getPersistentDataContainer().set(tag, PersistentDataType.STRING,
+                    run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                applyVisibility(p, d, claim);
+            }
+        });
+        entities.put(run, display.getUniqueId());
     }
 
     private void despawnRun(Run run) {
@@ -478,6 +508,10 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     @Override
     public void shutdown() {
+        if (healTask != null) {
+            healTask.cancel();
+            healTask = null;
+        }
         for (UUID id : entities.values()) {
             Entity e = Bukkit.getEntity(id);
             if (e != null) {

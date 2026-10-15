@@ -30,6 +30,7 @@ public final class ClaimStorage {
         this.log = log;
     }
 
+    /** Returns null when the file exists but could not be read; callers must then refuse to overwrite it. */
     public List<Claim> load() {
         List<Claim> result = new ArrayList<>();
         if (!Files.exists(file)) {
@@ -40,30 +41,51 @@ public final class ClaimStorage {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
             JsonArray claims = root.has("claims") ? root.getAsJsonArray("claims") : new JsonArray();
             for (JsonElement el : claims) {
-                JsonObject o = el.getAsJsonObject();
-                Claim claim = new Claim(UUID.fromString(o.get("owner").getAsString()),
-                        o.has("ownerName") ? o.get("ownerName").getAsString() : "?");
-                if (o.has("trusted")) {
-                    for (JsonElement t : o.getAsJsonArray("trusted")) {
-                        claim.addTrusted(UUID.fromString(t.getAsString()));
-                    }
+                try {
+                    result.add(readClaim(el.getAsJsonObject()));
+                } catch (RuntimeException ex) {
+                    log.warning("Skipping unreadable claim entry: " + ex.getMessage());
                 }
-                if (o.has("chunks")) {
-                    for (JsonElement c : o.getAsJsonArray("chunks")) {
-                        try {
-                            claim.addChunk(ChunkKey.parse(c.getAsString()));
-                        } catch (IllegalArgumentException ex) {
-                            log.warning("Skipping unreadable chunk entry: " + c);
-                        }
-                    }
-                }
-                result.add(claim);
             }
         } catch (IOException | RuntimeException ex) {
             log.severe("Could not read " + file + ": " + ex.getMessage());
             backupBroken();
+            return null;
         }
         return result;
+    }
+
+    private void readClaimTrusted(Claim claim, JsonElement t) {
+        if (t.isJsonObject()) {
+            JsonObject o = t.getAsJsonObject();
+            claim.addTrusted(UUID.fromString(o.get("id").getAsString()), o.has("name") ? o.get("name").getAsString() : "?");
+        } else {
+            claim.addTrusted(UUID.fromString(t.getAsString()), "?");
+        }
+    }
+
+    private Claim readClaim(JsonObject o) {
+        Claim claim = new Claim(UUID.fromString(o.get("owner").getAsString()),
+                o.has("ownerName") ? o.get("ownerName").getAsString() : "?");
+        if (o.has("trusted")) {
+            for (JsonElement t : o.getAsJsonArray("trusted")) {
+                try {
+                    readClaimTrusted(claim, t);
+                } catch (RuntimeException ex) {
+                    log.warning("Skipping unreadable trusted entry: " + t);
+                }
+            }
+        }
+        if (o.has("chunks")) {
+            for (JsonElement c : o.getAsJsonArray("chunks")) {
+                try {
+                    claim.addChunk(ChunkKey.parse(c.getAsString()));
+                } catch (IllegalArgumentException ex) {
+                    log.warning("Skipping unreadable chunk entry: " + c);
+                }
+            }
+        }
+        return claim;
     }
 
     /** Serialises on the calling thread; cheap, so it can run on the main thread. */
@@ -79,7 +101,12 @@ public final class ClaimStorage {
             o.addProperty("owner", claim.getOwner().toString());
             o.addProperty("ownerName", claim.getOwnerName());
             JsonArray trusted = new JsonArray();
-            claim.getTrusted().forEach(id -> trusted.add(id.toString()));
+            claim.getTrustedNames().forEach((id, name) -> {
+                JsonObject t = new JsonObject();
+                t.addProperty("id", id.toString());
+                t.addProperty("name", name);
+                trusted.add(t);
+            });
             o.add("trusted", trusted);
             JsonArray chunks = new JsonArray();
             claim.getChunks().forEach(k -> chunks.add(k.serialize()));
@@ -90,11 +117,11 @@ public final class ClaimStorage {
         return GSON.toJson(root);
     }
 
-    /** Writes atomically (temp file + move). Safe to call off the main thread. */
-    public void write(String json) {
+    /** Writes atomically (temp file + move). Safe to call off the main thread; writes are serialised. */
+    public synchronized void write(String json) {
         try {
             Files.createDirectories(file.getParent());
-            Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+            Path tmp = Files.createTempFile(file.getParent(), file.getFileName().toString(), ".tmp");
             Files.writeString(tmp, json, StandardCharsets.UTF_8);
             try {
                 Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

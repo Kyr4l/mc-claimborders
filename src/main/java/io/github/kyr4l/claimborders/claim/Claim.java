@@ -3,7 +3,9 @@ package io.github.kyr4l.claimborders.claim;
 import org.bukkit.entity.Player;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -15,7 +17,7 @@ public final class Claim {
 
     private final UUID owner;
     private String ownerName;
-    private final Set<UUID> trusted = new LinkedHashSet<>();
+    private final Map<UUID, String> trusted = new LinkedHashMap<>();
     private final Set<ChunkKey> chunks = new LinkedHashSet<>();
 
     public Claim(UUID owner, String ownerName) {
@@ -36,7 +38,12 @@ public final class Claim {
     }
 
     public Set<UUID> getTrusted() {
-        return Collections.unmodifiableSet(trusted);
+        return Collections.unmodifiableSet(trusted.keySet());
+    }
+
+    /** Trusted players with the name they had when trusted (no lookups needed). */
+    public Map<UUID, String> getTrustedNames() {
+        return Collections.unmodifiableMap(trusted);
     }
 
     public Set<ChunkKey> getChunks() {
@@ -48,7 +55,7 @@ public final class Claim {
     }
 
     public boolean isTrusted(UUID id) {
-        return owner.equals(id) || trusted.contains(id);
+        return owner.equals(id) || trusted.containsKey(id);
     }
 
     public boolean isTrusted(Player player) {
@@ -81,11 +88,16 @@ public final class Claim {
         return chunks.remove(key);
     }
 
-    boolean addTrusted(UUID id) {
-        return !owner.equals(id) && trusted.add(id);
+    boolean addTrusted(UUID id, String name) {
+        if (owner.equals(id)) {
+            return false;
+        }
+        boolean added = !trusted.containsKey(id);
+        trusted.put(id, name == null ? "?" : name);
+        return added;
     }
 
     boolean removeTrusted(UUID id) {
-        return trusted.remove(id);
+        return trusted.remove(id) != null;
     }
 }

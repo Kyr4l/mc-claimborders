@@ -31,6 +31,7 @@ public final class ClaimManager {
     private final Map<ChunkKey, Claim> byChunk = new HashMap<>();
     private final List<Consumer<ClaimChange>> listeners = new ArrayList<>();
     private boolean dirty;
+    private boolean saveDisabled;
     private int saveTaskId = -1;
 
     public ClaimManager(ClaimBordersPlugin plugin) {
@@ -43,12 +44,31 @@ public final class ClaimManager {
     public void load() {
         byOwner.clear();
         byChunk.clear();
-        for (Claim claim : storage.load()) {
-            byOwner.put(claim.getOwner(), claim);
-            for (ChunkKey key : claim.getChunks()) {
-                Claim previous = byChunk.put(key, claim);
-                if (previous != null) {
-                    plugin.getLogger().warning("Chunk " + key + " is listed for two owners; keeping " + claim.getOwnerName());
+        List<Claim> loaded = storage.load();
+        if (loaded == null) {
+            saveDisabled = true;
+            plugin.getLogger().severe("claims.json is unreadable. Saving is DISABLED until it is fixed or removed, so nothing is overwritten.");
+            return;
+        }
+        for (Claim claim : loaded) {
+            Claim existing = byOwner.get(claim.getOwner());
+            if (existing != null) {
+                plugin.getLogger().warning("Owner " + claim.getOwnerName() + " is listed twice; merging.");
+                claim.getTrustedNames().forEach(existing::addTrusted);
+                for (ChunkKey key : new ArrayList<>(claim.getChunks())) {
+                    existing.addChunk(key);
+                }
+                claim = existing;
+            } else {
+                byOwner.put(claim.getOwner(), claim);
+            }
+            for (ChunkKey key : new ArrayList<>(claim.getChunks())) {
+                Claim previous = byChunk.get(key);
+                if (previous != null && previous != claim) {
+                    plugin.getLogger().warning("Chunk " + key + " is listed for two owners; keeping " + previous.getOwnerName());
+                    claim.removeChunk(key);
+                } else {
+                    byChunk.put(key, claim);
                 }
             }
         }
@@ -57,6 +77,9 @@ public final class ClaimManager {
 
     /** Blocking save, used on disable. */
     public void saveNow() {
+        if (saveDisabled) {
+            return;
+        }
         if (saveTaskId != -1) {
             Bukkit.getScheduler().cancelTask(saveTaskId);
             saveTaskId = -1;
@@ -66,6 +89,9 @@ public final class ClaimManager {
     }
 
     private void markDirty() {
+        if (saveDisabled) {
+            return;
+        }
         dirty = true;
         if (saveTaskId != -1) {
             return;
@@ -223,8 +249,8 @@ public final class ClaimManager {
         return keys.size();
     }
 
-    public boolean trust(Claim claim, UUID target) {
-        if (claim.addTrusted(target)) {
+    public boolean trust(Claim claim, UUID target, String name) {
+        if (claim.addTrusted(target, name)) {
             markDirty();
             return true;
         }

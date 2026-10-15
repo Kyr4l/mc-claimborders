@@ -12,7 +12,9 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,7 +27,9 @@ public final class ClaimBordersPlugin extends JavaPlugin {
     private ClaimManager claims;
     private BorderService borders;
     private EntryGuard entryGuard;
-    private final Map<UUID, Long> lastMessage = new HashMap<>();
+    private final Map<String, Long> lastMessage = new HashMap<>();
+    /** Players who toggled /claim show. Survives renderer restarts. */
+    private final Set<UUID> showToggles = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -38,7 +42,7 @@ public final class ClaimBordersPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(entryGuard, this);
         Bukkit.getPluginManager().registerEvents(new BlockProtection(this), this);
 
-        borders = new BorderService(this);
+        borders = new BorderService(this, showToggles);
         borders.start();
 
         ClaimCommand executor = new ClaimCommand(this);
@@ -64,6 +68,7 @@ public final class ClaimBordersPlugin extends JavaPlugin {
             claims.saveNow();
         }
         lastMessage.clear();
+        showToggles.clear();
         getLogger().info("ClaimBorders disabled, claims saved.");
     }
 
@@ -72,7 +77,7 @@ public final class ClaimBordersPlugin extends JavaPlugin {
         reloadConfig();
         settings = new ClaimConfig(getConfig(), getLogger());
         borders.shutdown();
-        borders = new BorderService(this);
+        borders = new BorderService(this, showToggles);
         borders.start();
     }
 
@@ -93,17 +98,19 @@ public final class ClaimBordersPlugin extends JavaPlugin {
     }
 
     public void forgetCooldown(Player player) {
-        lastMessage.remove(player.getUniqueId());
+        String prefix = player.getUniqueId() + ":";
+        lastMessage.keySet().removeIf(k -> k.startsWith(prefix));
     }
 
-    /** Sends a message unless the same player got one within the configured cooldown. */
-    public void sendCooled(Player player, String message) {
+    /** Sends a message unless this player got the same kind of message within the configured cooldown. */
+    public void sendCooled(Player player, String key, String message) {
         long now = System.currentTimeMillis();
-        Long last = lastMessage.get(player.getUniqueId());
+        String k = player.getUniqueId() + ":" + key;
+        Long last = lastMessage.get(k);
         if (last != null && now - last < settings.messageCooldownMillis()) {
             return;
         }
-        lastMessage.put(player.getUniqueId(), now);
+        lastMessage.put(k, now);
         player.sendMessage(message);
     }
 }

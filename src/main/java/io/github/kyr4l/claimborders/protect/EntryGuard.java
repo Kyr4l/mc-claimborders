@@ -7,7 +7,9 @@ import io.github.kyr4l.claimborders.claim.Claim;
 import io.github.kyr4l.claimborders.claim.ClaimManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Vehicle;
@@ -16,6 +18,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.util.Vector;
@@ -58,7 +61,7 @@ public final class EntryGuard implements Listener {
             return;
         }
         Player p = e.getPlayer();
-        if (p.isInsideVehicle() || exempt(p)) {
+        if (exempt(p)) {
             return;
         }
         boolean crossed = (from.getBlockX() >> 4) != (to.getBlockX() >> 4)
@@ -70,15 +73,25 @@ public final class EntryGuard implements Listener {
                 Location back = from.clone();
                 back.setYaw(to.getYaw());
                 back.setPitch(to.getPitch());
+                // Riders of client-controlled mounts (horses, boats) arrive here too; drop them off the mount.
+                Entity mount = p.getVehicle();
+                if (mount != null) {
+                    p.leaveVehicle();
+                    Vector shove = from.toVector().subtract(to.toVector());
+                    if (shove.lengthSquared() > 1e-6) {
+                        mount.setVelocity(shove.normalize().multiply(0.4));
+                    }
+                }
                 e.setTo(back);
                 if (cfg().forceFieldMode() != ClaimConfig.ForceFieldMode.HARD) {
                     knockBack(p, ChunkKey.of(to), from);
                 }
-                plugin.sendCooled(p, cfg().msg("entry-denied", "owner", target.getOwnerName()));
+                plugin.sendCooled(p, "entry", cfg().msg("entry-denied", "owner", target.getOwnerName()));
                 return;
             }
         }
-        if (cfg().forceFieldMode() == ClaimConfig.ForceFieldMode.PUSH) {
+        boolean moved = from.getX() != to.getX() || from.getZ() != to.getZ();
+        if (moved && !p.isInsideVehicle() && cfg().forceFieldMode() == ClaimConfig.ForceFieldMode.PUSH) {
             softPush(p, to);
         }
     }
@@ -158,10 +171,29 @@ public final class EntryGuard implements Listener {
             return;
         }
         Claim target = plugin.claims().getClaimAt(e.getTo());
-        if (target != null && !target.isTrusted(p)) {
+        // Same rule as walking: a teleport that stays inside the claim the player is already in (including the
+        // server's own rubber-band after a denied move) is not an entry.
+        if (target != null && !target.isTrusted(p) && plugin.claims().getClaimAt(e.getFrom()) != target) {
             e.setCancelled(true);
-            plugin.sendCooled(p, cfg().msg("entry-denied", "owner", target.getOwnerName()));
+            plugin.sendCooled(p, "entry", cfg().msg("entry-denied", "owner", target.getOwnerName()));
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onRespawn(PlayerRespawnEvent e) {
+        if (!cfg().forceFieldEnabled() || !cfg().ejectOnJoin()) {
+            return;
+        }
+        Player p = e.getPlayer();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!p.isOnline() || exempt(p)) {
+                return;
+            }
+            Claim claim = plugin.claims().getClaimAt(p.getLocation());
+            if (claim != null && !claim.isTrusted(p)) {
+                eject(p, claim);
+            }
+        }, 2L);
     }
 
     // ---- vanilla vehicles (boats, minecarts, horses...) -------------------
@@ -199,7 +231,7 @@ public final class EntryGuard implements Listener {
             back.setPitch(p.getLocation().getPitch());
             p.teleport(back);
             knockBack(p, ChunkKey.of(to), from);
-            plugin.sendCooled(p, cfg().msg("entry-denied", "owner", target.getOwnerName()));
+            plugin.sendCooled(p, "entry", cfg().msg("entry-denied", "owner", target.getOwnerName()));
         }
         Vector v = from.toVector().subtract(to.toVector());
         if (v.lengthSquared() > 1e-6) {
@@ -256,7 +288,11 @@ public final class EntryGuard implements Listener {
         p.sendMessage(cfg().msg("ejected", "owner", claim.getOwnerName()));
     }
 
-    /** Centre of the nearest chunk the player may stand in, on top of the terrain. */
+    /**
+     * A standable spot in the nearest accessible chunk, searched around the player's own height so it also
+     * works underground and in the Nether. Only loaded chunks are considered (never forces a chunk load).
+     * Falls back to the world spawn.
+     */
     private Location findSafeOutside(Player p) {
         Location origin = p.getLocation();
         World world = origin.getWorld();
@@ -264,20 +300,47 @@ public final class EntryGuard implements Listener {
             return null;
         }
         ChunkKey center = ChunkKey.of(origin);
-        for (int ring = 1; ring <= 16; ring++) {
+        for (int ring = 1; ring <= 10; ring++) {
             for (int dx = -ring; dx <= ring; dx++) {
                 for (int dz = -ring; dz <= ring; dz++) {
                     if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) {
                         continue;
                     }
                     ChunkKey key = center.offset(dx, dz);
-                    if (!plugin.claims().canAccess(p, key)) {
+                    if (!world.isChunkLoaded(key.x(), key.z()) || !plugin.claims().canAccess(p, key)) {
                         continue;
                     }
-                    int bx = key.minBlockX() + 8;
-                    int bz = key.minBlockZ() + 8;
-                    int y = world.getHighestBlockYAt(bx, bz) + 1;
-                    return new Location(world, bx + 0.5, y, bz + 0.5, origin.getYaw(), origin.getPitch());
+                    Location spot = standable(world, key.minBlockX() + 8, key.minBlockZ() + 8, origin.getBlockY());
+                    if (spot != null) {
+                        spot.setYaw(origin.getYaw());
+                        spot.setPitch(origin.getPitch());
+                        return spot;
+                    }
+                }
+            }
+        }
+        Location spawn = world.getSpawnLocation();
+        return plugin.claims().canAccess(p, spawn) ? spawn : null;
+    }
+
+    /** Nearest y to {@code aroundY} in this column with a solid floor and two passable, non-liquid blocks. */
+    private static Location standable(World world, int x, int z, int aroundY) {
+        int min = world.getMinHeight() + 1;
+        int max = world.getMaxHeight() - 2;
+        for (int d = 0; d < 96; d++) {
+            for (int y : new int[] {aroundY - d, aroundY + d}) {
+                if (y < min || y > max) {
+                    continue;
+                }
+                Block floor = world.getBlockAt(x, y - 1, z);
+                Block feet = world.getBlockAt(x, y, z);
+                Block head = world.getBlockAt(x, y + 1, z);
+                if (floor.getType().isSolid() && floor.getType() != Material.MAGMA_BLOCK
+                        && feet.isPassable() && !feet.isLiquid() && head.isPassable() && !head.isLiquid()) {
+                    return new Location(world, x + 0.5, y, z + 0.5);
+                }
+                if (d == 0) {
+                    break;
                 }
             }
         }

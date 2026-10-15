@@ -13,7 +13,7 @@ claims:
   blocked-worlds: []
   # When a chunk gets claimed, non-trusted players standing inside are moved to the nearest free chunk.
   eject-on-claim: true
-  # Same thing on login: a non-trusted player who logs in inside a claim is moved out.
+  # Same thing on login and respawn: a non-trusted player who appears inside a claim is moved out.
   eject-on-join: true
 
 protection:
