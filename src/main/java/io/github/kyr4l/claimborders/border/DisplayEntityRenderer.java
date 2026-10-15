@@ -9,6 +9,7 @@ import io.github.kyr4l.claimborders.claim.ClaimManager;
 import io.github.kyr4l.claimborders.claim.TrustLevel;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -18,6 +19,7 @@ import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
@@ -92,15 +94,18 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     }
 
     /**
-     * The entities of one run: one panel per look (member, visitor, outsider). Looks that share a material
-     * share the entity.
+     * The entities of one run: the panel(s) per look (member, visitor, outsider). Looks that share a
+     * material or colour share the entities. TEXT style uses two entities per look, one per facing.
      */
-    private record Panels(UUID own, UUID visitor, UUID foreign) {
+    private record Panels(List<UUID> own, List<UUID> visitor, List<UUID> foreign) {
         Set<UUID> all() {
-            return new LinkedHashSet<>(List.of(own, visitor, foreign));
+            Set<UUID> all = new LinkedHashSet<>(own);
+            all.addAll(visitor);
+            all.addAll(foreign);
+            return all;
         }
 
-        UUID forLevel(TrustLevel level) {
+        List<UUID> forLevel(TrustLevel level) {
             return switch (level) {
                 case MEMBER -> own;
                 case VISITOR -> visitor;
@@ -108,6 +113,15 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             };
         }
     }
+
+    /**
+     * A text display with a single space renders a background quad of (space width 4 + 2) x (line 10 + 1)
+     * font pixels at 0.025 blocks per pixel, centred horizontally on the origin and rising from it.
+     * Used to map that quad onto a panel. Single-sided, so two are spawned, one per facing.
+     */
+    private static final double TEXT_QUAD_X0 = -2 * 0.025;
+    private static final double TEXT_QUAD_X1 = 3 * 0.025;
+    private static final double TEXT_QUAD_H = 11 * 0.025;
 
     private final ClaimBordersPlugin plugin;
     private final BorderService service;
@@ -182,7 +196,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             Run run = runByEdge.get(view.edge());
             Panels panels = run == null ? null : entities.get(run);
             if (panels != null) {
-                wanted.add(panels.forLevel(view.level()));
+                wanted.addAll(panels.forLevel(view.level()));
             }
         }
         Set<UUID> shown = shownNear.computeIfAbsent(viewer.getUniqueId(), k -> new HashSet<>());
@@ -243,7 +257,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     /** Decides which colour (if any) this player sees. In NEAR mode everything starts hidden. */
     private void applyVisibility(Player player, Panels panels, Claim claim) {
-        UUID visible = null;
+        List<UUID> visible = List.of();
         if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.ALWAYS) {
             TrustLevel level = service.relationOf(player, claim);
             boolean show = level != TrustLevel.MEMBER
@@ -257,7 +271,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             if (e == null) {
                 continue;
             }
-            if (id.equals(visible)) {
+            if (visible.contains(id)) {
                 player.showEntity(plugin, e);
             } else {
                 player.hideEntity(plugin, e);
@@ -512,13 +526,16 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
         Location loc = new Location(world, ox, originY, oz);
         Claim claim = plugin.claims().getClaimOf(run.owner());
-        Map<Material, UUID> byMaterial = new HashMap<>();
-        for (Material material : List.of(cfg.displayMaterial(), cfg.displayVisitorMaterial(), cfg.displayForeignMaterial())) {
-            byMaterial.computeIfAbsent(material, m ->
-                    spawnPanel(world, loc, run, m, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId());
+        Map<Object, List<UUID>> byLook = new HashMap<>();
+        List<Object> looks = cfg.displayStyle() == ClaimConfig.DisplayStyle.TEXT
+                ? List.of(cfg.displayColor(), cfg.displayVisitorColor(), cfg.displayForeignColor())
+                : List.of(cfg.displayMaterial(), cfg.displayVisitorMaterial(), cfg.displayForeignMaterial());
+        for (Object look : looks) {
+            byLook.computeIfAbsent(look, l -> l instanceof Material m
+                    ? List.of(spawnPanel(world, loc, run, m, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId())
+                    : spawnTextPanel(world, loc, run, (Color) l, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight));
         }
-        Panels panels = new Panels(byMaterial.get(cfg.displayMaterial()), byMaterial.get(cfg.displayVisitorMaterial()),
-                byMaterial.get(cfg.displayForeignMaterial()));
+        Panels panels = new Panels(byLook.get(looks.get(0)), byLook.get(looks.get(1)), byLook.get(looks.get(2)));
         for (Player p : Bukkit.getOnlinePlayers()) {
             applyVisibility(p, panels, claim);
         }
@@ -571,6 +588,69 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         });
     }
 
+    /**
+     * TEXT style: two text displays (one per facing) whose background quad is stretched over the panel.
+     * The panel is centred within the thickness band so it lines up with the BLOCK geometry.
+     */
+    private List<UUID> spawnTextPanel(World world, Location loc, Run run, Color color,
+                                      double x0, double z0, double lenX, double lenZ, int minY, int height,
+                                      float cullWidth, float cullHeight) {
+        ClaimConfig cfg = plugin.settings();
+        int alpha = (int) Math.round(cfg.displayOpacity() * 255);
+        Color argb = Color.fromARGB(alpha, color.getRed(), color.getGreen(), color.getBlue());
+        boolean alongX = run.alongX();
+        double length = alongX ? lenX : lenZ;
+        float sx = (float) (length / (TEXT_QUAD_X1 - TEXT_QUAD_X0));
+        float sy = (float) (height / TEXT_QUAD_H);
+        double planeX = x0 + lenX / 2;
+        double planeZ = z0 + lenZ / 2;
+        List<UUID> ids = new ArrayList<>(2);
+        for (int facing = 0; facing < 2; facing++) {
+            Quaternionf rot;
+            double tx;
+            double tz;
+            if (alongX) {
+                // quad in the XY plane; facing 1 is turned 180 degrees so its front looks the other way
+                rot = new Quaternionf().rotationY(facing == 0 ? 0f : (float) Math.PI);
+                tx = facing == 0 ? x0 - loc.getX() - TEXT_QUAD_X0 * sx : x0 - loc.getX() + TEXT_QUAD_X1 * sx;
+                tz = planeZ - loc.getZ();
+            } else {
+                // quad turned into the ZY plane
+                rot = new Quaternionf().rotationY(facing == 0 ? (float) (Math.PI / 2) : (float) (-Math.PI / 2));
+                tx = planeX - loc.getX();
+                tz = facing == 0 ? z0 - loc.getZ() + TEXT_QUAD_X1 * sx : z0 - loc.getZ() - TEXT_QUAD_X0 * sx;
+            }
+            Vector3f translation = new Vector3f((float) tx, (float) (minY - loc.getY()), (float) tz);
+            Vector3f scale = new Vector3f(sx, sy, 1f);
+            TextDisplay d = world.spawn(loc, TextDisplay.class, (java.util.function.Consumer<TextDisplay>) t -> {
+                t.setText(" ");
+                t.setBackgroundColor(argb);
+                t.setDefaultBackground(false);
+                t.setSeeThrough(false);
+                t.setShadowed(false);
+                t.setBillboard(Display.Billboard.FIXED);
+                t.setTransformation(new Transformation(translation, rot, scale, new Quaternionf()));
+                t.setBrightness(new Display.Brightness(15, 15));
+                if (cfg.displayCullingBox()) {
+                    t.setDisplayWidth(cullWidth);
+                    t.setDisplayHeight(cullHeight);
+                }
+                t.setViewRange(16f);
+                t.setPersistent(false);
+                t.setInvulnerable(true);
+                t.setSilent(true);
+                t.setGravity(false);
+                t.getPersistentDataContainer().set(tag, PersistentDataType.STRING,
+                        run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    p.hideEntity(plugin, t);
+                }
+            });
+            ids.add(d.getUniqueId());
+        }
+        return ids;
+    }
+
     private void despawnRun(Run run) {
         Panels panels = entities.remove(run);
         if (panels == null) {
@@ -591,7 +671,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     private void sweepLeftovers() {
         int removed = 0;
         for (World world : Bukkit.getWorlds()) {
-            for (BlockDisplay d : world.getEntitiesByClass(BlockDisplay.class)) {
+            for (Display d : world.getEntitiesByClass(Display.class)) {
                 if (d.getPersistentDataContainer().has(tag, PersistentDataType.STRING)) {
                     d.remove();
                     removed++;

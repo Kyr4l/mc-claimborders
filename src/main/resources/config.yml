@@ -74,8 +74,16 @@ border:
     radius: 32
 
   display:
-    # A *_STAINED_GLASS_PANE gives a flat, uniform tint. A full block (e.g. LIGHT_BLUE_STAINED_GLASS, ICE)
-    # stretches its whole texture over the panel, frame included.
+    # BLOCK: panels are scaled block displays using the materials below (opacity is whatever the texture has).
+    # TEXT : panels are flat colour quads (text display backgrounds) with free colour and opacity.
+    style: BLOCK
+    # TEXT style only. opacity 0 = invisible, 1 = solid. Colours per standing in the claim.
+    opacity: 0.35
+    color: "#4FC3F7"
+    visitor-color: "#FFEE58"
+    foreign-color: "#FF5252"
+    # BLOCK style only. A *_STAINED_GLASS_PANE gives a flat, uniform tint. A full block (e.g. ICE) stretches
+    # its whole texture over the panel, frame included.
     # material: what members of the claim see. visitor-material: read-only visitors. foreign-material: everyone else.
     material: LIGHT_BLUE_STAINED_GLASS_PANE
     visitor-material: YELLOW_STAINED_GLASS_PANE

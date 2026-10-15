@@ -55,7 +55,10 @@ claims.max-chunks: 16          # default limit
 border.renderer: DISPLAY       # PARTICLES | GHOST_BLOCKS | DISPLAY | NONE
 forcefield.mode: PUSH          # HARD | BOUNCE | PUSH
 border.display.reveal: NEAR    # ALWAYS | NEAR  (DISPLAY renderer only)
-border.display.material: LIGHT_BLUE_STAINED_GLASS_PANE    # what members see
+border.display.style: BLOCK    # BLOCK = pane/block materials; TEXT = flat colour quads with free opacity
+border.display.opacity: 0.35   # TEXT style
+border.display.color: "#4FC3F7"            # TEXT style, members; visitor-color / foreign-color likewise
+border.display.material: LIGHT_BLUE_STAINED_GLASS_PANE    # BLOCK style, what members see
 border.display.visitor-material: YELLOW_STAINED_GLASS_PANE # what visitors see
 border.display.foreign-material: RED_STAINED_GLASS_PANE   # what outsiders see
 forcefield.visitor-glow: true  # visitors glow inside the claim (vanilla sends glow to every client)

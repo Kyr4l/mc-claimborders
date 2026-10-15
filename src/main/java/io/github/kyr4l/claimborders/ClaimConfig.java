@@ -20,6 +20,8 @@ public final class ClaimConfig {
 
     public enum RevealMode { ALWAYS, NEAR }
 
+    public enum DisplayStyle { BLOCK, TEXT }
+
     // claims
     private final int maxChunks;
     private final boolean requireAdjacent;
@@ -69,6 +71,11 @@ public final class ClaimConfig {
     private final Material ghostVisitorOutlineMaterial;
     private final int ghostRadius;
 
+    private final DisplayStyle displayStyle;
+    private final double displayOpacity;
+    private final Color displayColor;
+    private final Color displayVisitorColor;
+    private final Color displayForeignColor;
     private final Material displayMaterial;
     private final Material displayForeignMaterial;
     private final Material displayVisitorMaterial;
@@ -131,6 +138,11 @@ public final class ClaimConfig {
         ghostVisitorOutlineMaterial = parseMaterial(c.getString("border.ghost-blocks.visitor-outline-material"), Material.GLOWSTONE, log);
         ghostRadius = Math.max(8, c.getInt("border.ghost-blocks.radius", 32));
 
+        displayStyle = parseEnum(DisplayStyle.class, c.getString("border.display.style"), DisplayStyle.BLOCK, log);
+        displayOpacity = Math.max(0.0, Math.min(1.0, c.getDouble("border.display.opacity", 0.35)));
+        displayColor = Text.parseColor(c.getString("border.display.color"), Color.fromRGB(0x4FC3F7));
+        displayVisitorColor = Text.parseColor(c.getString("border.display.visitor-color"), Color.fromRGB(0xFFEE58));
+        displayForeignColor = Text.parseColor(c.getString("border.display.foreign-color"), Color.fromRGB(0xFF5252));
         displayMaterial = parseMaterial(c.getString("border.display.material"), Material.LIGHT_BLUE_STAINED_GLASS_PANE, log);
         displayForeignMaterial = parseMaterial(c.getString("border.display.foreign-material"), Material.RED_STAINED_GLASS_PANE, log);
         displayVisitorMaterial = parseMaterial(c.getString("border.display.visitor-material"), Material.YELLOW_STAINED_GLASS_PANE, log);
@@ -237,6 +249,11 @@ public final class ClaimConfig {
     public Material ghostVisitorOutlineMaterial() { return ghostVisitorOutlineMaterial; }
     public int ghostRadius() { return ghostRadius; }
 
+    public DisplayStyle displayStyle() { return displayStyle; }
+    public double displayOpacity() { return displayOpacity; }
+    public Color displayColor() { return displayColor; }
+    public Color displayVisitorColor() { return displayVisitorColor; }
+    public Color displayForeignColor() { return displayForeignColor; }
     public Material displayMaterial() { return displayMaterial; }
     public Material displayForeignMaterial() { return displayForeignMaterial; }
     public Material displayVisitorMaterial() { return displayVisitorMaterial; }
