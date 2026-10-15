@@ -58,9 +58,10 @@ public final class ClaimStorage {
     private void readClaimTrusted(Claim claim, JsonElement t) {
         if (t.isJsonObject()) {
             JsonObject o = t.getAsJsonObject();
-            claim.addTrusted(UUID.fromString(o.get("id").getAsString()), o.has("name") ? o.get("name").getAsString() : "?");
+            TrustLevel level = o.has("level") ? TrustLevel.parse(o.get("level").getAsString(), TrustLevel.MEMBER) : TrustLevel.MEMBER;
+            claim.setTrusted(UUID.fromString(o.get("id").getAsString()), o.has("name") ? o.get("name").getAsString() : "?", level);
         } else {
-            claim.addTrusted(UUID.fromString(t.getAsString()), "?");
+            claim.setTrusted(UUID.fromString(t.getAsString()), "?", TrustLevel.MEMBER);
         }
     }
 
@@ -101,10 +102,11 @@ public final class ClaimStorage {
             o.addProperty("owner", claim.getOwner().toString());
             o.addProperty("ownerName", claim.getOwnerName());
             JsonArray trusted = new JsonArray();
-            claim.getTrustedNames().forEach((id, name) -> {
+            claim.getTrusted().forEach((id, entry) -> {
                 JsonObject t = new JsonObject();
                 t.addProperty("id", id.toString());
-                t.addProperty("name", name);
+                t.addProperty("name", entry.name());
+                t.addProperty("level", entry.level().name());
                 trusted.add(t);
             });
             o.add("trusted", trusted);

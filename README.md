@@ -5,6 +5,7 @@ Arclight or Mohist). Players claim chunks one by one, the claim gets a visible b
 field keeps non-trusted players out.
 
 - One claim per player, any number of chunks (limit in config or per-permission), optional adjacency rule.
+- Two trust levels: **members** have full access, **visitors** may enter but cannot edit or interact.
 - Three border renderers, switchable in config: **particles**, **ghost blocks** (client-side fake blocks) or
   **display entities** (world-border style translucent panels, one per straight run of border).
 - Three force-field behaviours: **HARD** stop, **BOUNCE** (stop + knockback) or **PUSH** (soft repulsion zone).
@@ -21,9 +22,11 @@ See [docs/variants.md](docs/variants.md) for the comparison of the border and fo
 | `/claim` | Claim the chunk you stand in |
 | `/claim unclaim` (or `/unclaim`) | Release the chunk you stand in |
 | `/claim unclaimall confirm` | Release every chunk you own |
-| `/claim trust <player>` (or `/trust`) | Let a player into your claim |
+| `/claim trust <player>` (or `/trust`) | Make a player a **member**: full access |
+| `/claim trust <player> visitor` | Make a player a **visitor**: may enter, cannot break, place or use anything; glows while inside |
 | `/claim untrust <player>` (or `/untrust`) | Remove them |
-| `/claim trustlist` | Who is trusted |
+| `/claim trustlist` | Who is trusted, and at which level |
+| `/claim view member\|visitor\|outsider\|off` | Preview how the borders render for that level (visual only) |
 | `/claim info` | Owner of the chunk you stand in |
 | `/claim list` | Your chunks |
 | `/claim map` | Chunk map around you, in chat |
@@ -52,8 +55,10 @@ claims.max-chunks: 16          # default limit
 border.renderer: DISPLAY       # PARTICLES | GHOST_BLOCKS | DISPLAY | NONE
 forcefield.mode: PUSH          # HARD | BOUNCE | PUSH
 border.display.reveal: NEAR    # ALWAYS | NEAR  (DISPLAY renderer only)
-border.display.material: LIGHT_BLUE_STAINED_GLASS_PANE   # what members see
-border.display.foreign-material: RED_STAINED_GLASS_PANE  # what outsiders see
+border.display.material: LIGHT_BLUE_STAINED_GLASS_PANE    # what members see
+border.display.visitor-material: YELLOW_STAINED_GLASS_PANE # what visitors see
+border.display.foreign-material: RED_STAINED_GLASS_PANE   # what outsiders see
+forcefield.visitor-glow: true  # visitors glow inside the claim (vanilla sends glow to every client)
 protection.ignore-fake-players: true   # keep on with Create
 ```
 

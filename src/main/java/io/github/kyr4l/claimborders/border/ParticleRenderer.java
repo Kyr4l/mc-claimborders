@@ -29,6 +29,7 @@ public final class ParticleRenderer implements BorderRenderer {
     private final ClaimBordersPlugin plugin;
     private final Particle particle;
     private final Object ownData;
+    private final Object visitorData;
     private final Object foreignData;
 
     public ParticleRenderer(ClaimBordersPlugin plugin) {
@@ -45,9 +46,11 @@ public final class ParticleRenderer implements BorderRenderer {
         this.particle = resolved;
         if (particle.getDataType() == Particle.DustOptions.class) {
             ownData = new Particle.DustOptions(cfg.particleColor(), cfg.particleSize());
+            visitorData = new Particle.DustOptions(cfg.particleVisitorColor(), cfg.particleSize());
             foreignData = new Particle.DustOptions(cfg.particleForeignColor(), cfg.particleSize());
         } else {
             ownData = null;
+            visitorData = null;
             foreignData = null;
         }
     }
@@ -69,16 +72,20 @@ public final class ParticleRenderer implements BorderRenderer {
         int span = cfg.particleVerticalSpan();
         Set<Corner> posts = new HashSet<>();
 
-        // Two claims facing each other share one line; draw it once, in the "foreign" colour if either is foreign.
+        // Two claims facing each other share one line; draw it once, in the colour of the lower standing.
         Map<Line, EdgeView> lines = new LinkedHashMap<>();
         for (EdgeView view : edges) {
             BoundaryEdge e = view.edge();
-            lines.merge(new Line(e.x1(), e.z1(), e.x2(), e.z2()), view, (a, b) -> a.trusted() ? b : a);
+            lines.merge(new Line(e.x1(), e.z1(), e.x2(), e.z2()), view, (a, b) -> a.level().compareTo(b.level()) <= 0 ? a : b);
         }
 
         for (EdgeView view : lines.values()) {
             BoundaryEdge edge = view.edge();
-            Object data = view.trusted() ? ownData : foreignData;
+            Object data = switch (view.level()) {
+                case MEMBER -> ownData;
+                case VISITOR -> visitorData;
+                case NONE -> foreignData;
+            };
             for (int layer : cfg.particleLayers()) {
                 double y = Math.floor(py) + layer + 0.1;
                 if (edge.alongX()) {

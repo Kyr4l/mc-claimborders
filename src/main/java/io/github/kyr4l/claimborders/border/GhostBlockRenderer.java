@@ -40,11 +40,13 @@ public final class GhostBlockRenderer implements BorderRenderer {
     private final Map<UUID, ViewerState> viewers = new HashMap<>();
     private final BlockData wall;
     private final BlockData outline;
+    private final BlockData visitorOutline;
 
     public GhostBlockRenderer(ClaimBordersPlugin plugin) {
         this.plugin = plugin;
         this.wall = plugin.settings().ghostWallMaterial().createBlockData();
         this.outline = plugin.settings().ghostOutlineMaterial().createBlockData();
+        this.visitorOutline = plugin.settings().ghostVisitorOutlineMaterial().createBlockData();
     }
 
     @Override
@@ -67,10 +69,11 @@ public final class GhostBlockRenderer implements BorderRenderer {
             for (int i = 0; i < 16; i++) {
                 int bx = edge.innerBlockX(i);
                 int bz = edge.innerBlockZ(i);
-                if (view.trusted()) {
+                if (view.level().canEnter()) {
+                    // Members and visitors may walk through: mark the ground, never wall them in.
                     int y = surfaceY(world, bx, bz, py);
                     if (y != Integer.MIN_VALUE) {
-                        desired.put(new BlockPos(bx, y, bz), outline);
+                        desired.put(new BlockPos(bx, y, bz), view.trusted() ? outline : visitorOutline);
                     }
                 } else {
                     int minY = Math.max(world.getMinHeight(), py - cfg.ghostWallBelow());

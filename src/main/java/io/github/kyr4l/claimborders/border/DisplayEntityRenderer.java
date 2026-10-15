@@ -6,6 +6,7 @@ import io.github.kyr4l.claimborders.claim.BoundaryEdge;
 import io.github.kyr4l.claimborders.claim.ChunkKey;
 import io.github.kyr4l.claimborders.claim.Claim;
 import io.github.kyr4l.claimborders.claim.ClaimManager;
+import io.github.kyr4l.claimborders.claim.TrustLevel;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -91,17 +92,20 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     }
 
     /**
-     * The entities of one run: the member-coloured panel and the outsider-coloured one. When both colours are
-     * the same material the lists hold the same entity.
+     * The entities of one run: one panel per look (member, visitor, outsider). Looks that share a material
+     * share the entity.
      */
-    private record Panels(List<UUID> own, List<UUID> foreign) {
-        List<UUID> all() {
-            if (own.equals(foreign)) {
-                return own;
-            }
-            List<UUID> all = new ArrayList<>(own);
-            all.addAll(foreign);
-            return all;
+    private record Panels(UUID own, UUID visitor, UUID foreign) {
+        Set<UUID> all() {
+            return new LinkedHashSet<>(List.of(own, visitor, foreign));
+        }
+
+        UUID forLevel(TrustLevel level) {
+            return switch (level) {
+                case MEMBER -> own;
+                case VISITOR -> visitor;
+                case NONE -> foreign;
+            };
         }
     }
 
@@ -178,7 +182,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             Run run = runByEdge.get(view.edge());
             Panels panels = run == null ? null : entities.get(run);
             if (panels != null) {
-                wanted.addAll(view.trusted() ? panels.own() : panels.foreign());
+                wanted.add(panels.forLevel(view.level()));
             }
         }
         Set<UUID> shown = shownNear.computeIfAbsent(viewer.getUniqueId(), k -> new HashSet<>());
@@ -224,7 +228,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
         for (Map.Entry<Run, Panels> entry : entities.entrySet()) {
             Claim claim = plugin.claims().getClaimOf(entry.getKey().owner());
-            if (claim != null && claim.isTrusted(viewer)) {
+            if (claim != null && service.relationOf(viewer, claim) == TrustLevel.MEMBER) {
                 applyVisibility(viewer, entry.getValue(), claim);
             }
         }
@@ -239,31 +243,21 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     /** Decides which colour (if any) this player sees. In NEAR mode everything starts hidden. */
     private void applyVisibility(Player player, Panels panels, Claim claim) {
-        boolean showOwn = false;
-        boolean showForeign = false;
+        UUID visible = null;
         if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.ALWAYS) {
-            boolean trusted = claim != null && claim.isTrusted(player);
-            if (trusted) {
-                showOwn = !plugin.settings().displayHideFromTrusted() || service.isShowing(player);
-            } else {
-                showForeign = true;
+            TrustLevel level = service.relationOf(player, claim);
+            boolean show = level != TrustLevel.MEMBER
+                    || !plugin.settings().displayHideFromTrusted() || service.isShowing(player);
+            if (show) {
+                visible = panels.forLevel(level);
             }
         }
-        if (panels.own().equals(panels.foreign())) {
-            toggle(player, panels.own(), showOwn || showForeign);
-        } else {
-            toggle(player, panels.own(), showOwn);
-            toggle(player, panels.foreign(), showForeign);
-        }
-    }
-
-    private void toggle(Player player, List<UUID> ids, boolean visible) {
-        for (UUID id : ids) {
+        for (UUID id : panels.all()) {
             Entity e = Bukkit.getEntity(id);
             if (e == null) {
                 continue;
             }
-            if (visible) {
+            if (id.equals(visible)) {
                 player.showEntity(plugin, e);
             } else {
                 player.hideEntity(plugin, e);
@@ -518,14 +512,13 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
         Location loc = new Location(world, ox, originY, oz);
         Claim claim = plugin.claims().getClaimOf(run.owner());
-        Material ownMat = cfg.displayMaterial();
-        Material foreignMat = cfg.displayForeignMaterial();
-        List<Material> materials = foreignMat == ownMat ? List.of(ownMat) : List.of(ownMat, foreignMat);
-        List<List<UUID>> ids = new ArrayList<>();
-        for (Material material : materials) {
-            ids.add(List.of(spawnPanel(world, loc, run, material, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId()));
+        Map<Material, UUID> byMaterial = new HashMap<>();
+        for (Material material : List.of(cfg.displayMaterial(), cfg.displayVisitorMaterial(), cfg.displayForeignMaterial())) {
+            byMaterial.computeIfAbsent(material, m ->
+                    spawnPanel(world, loc, run, m, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId());
         }
-        Panels panels = new Panels(ids.get(0), ids.get(ids.size() - 1));
+        Panels panels = new Panels(byMaterial.get(cfg.displayMaterial()), byMaterial.get(cfg.displayVisitorMaterial()),
+                byMaterial.get(cfg.displayForeignMaterial()));
         for (Player p : Bukkit.getOnlinePlayers()) {
             applyVisibility(p, panels, claim);
         }

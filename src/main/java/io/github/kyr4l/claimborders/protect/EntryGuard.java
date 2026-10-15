@@ -5,6 +5,7 @@ import io.github.kyr4l.claimborders.ClaimConfig;
 import io.github.kyr4l.claimborders.claim.ChunkKey;
 import io.github.kyr4l.claimborders.claim.Claim;
 import io.github.kyr4l.claimborders.claim.ClaimManager;
+import io.github.kyr4l.claimborders.claim.TrustLevel;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,10 +22,14 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * The force field: keeps non-trusted players out of claimed chunks.
@@ -34,10 +39,46 @@ import java.util.List;
 public final class EntryGuard implements Listener {
 
     private final ClaimBordersPlugin plugin;
+    /** Players we made glow (visitors inside a claim); only these get un-glowed by us. */
+    private final Set<UUID> glowing = new HashSet<>();
+    private BukkitTask glowTask;
 
     public EntryGuard(ClaimBordersPlugin plugin) {
         this.plugin = plugin;
         plugin.claims().addListener(this::onClaimChange);
+        glowTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateGlow, 20L, 10L);
+    }
+
+    /** Visitors glow while inside a claim they are only allowed to visit. */
+    private void updateGlow() {
+        boolean enabled = cfg().forceFieldEnabled() && cfg().visitorGlow();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            Claim claim = plugin.claims().getClaimAt(p.getLocation());
+            boolean should = enabled && claim != null && claim.levelOf(p) == TrustLevel.VISITOR;
+            boolean is = glowing.contains(p.getUniqueId());
+            if (should && !is) {
+                p.setGlowing(true);
+                glowing.add(p.getUniqueId());
+            } else if (!should && is) {
+                p.setGlowing(false);
+                glowing.remove(p.getUniqueId());
+            }
+        }
+        glowing.removeIf(id -> Bukkit.getPlayer(id) == null);
+    }
+
+    public void shutdown() {
+        if (glowTask != null) {
+            glowTask.cancel();
+            glowTask = null;
+        }
+        for (UUID id : glowing) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null) {
+                p.setGlowing(false);
+            }
+        }
+        glowing.clear();
     }
 
     private ClaimConfig cfg() {
@@ -69,7 +110,7 @@ public final class EntryGuard implements Listener {
                 || from.getWorld() != to.getWorld();
         if (crossed) {
             Claim target = plugin.claims().getClaimAt(to);
-            if (target != null && !target.isTrusted(p) && plugin.claims().getClaimAt(from) != target) {
+            if (target != null && !target.canEnter(p) && plugin.claims().getClaimAt(from) != target) {
                 Location back = from.clone();
                 back.setYaw(to.getYaw());
                 back.setPitch(to.getPitch());
@@ -119,7 +160,7 @@ public final class EntryGuard implements Listener {
     private void softPush(Player p, Location at) {
         ChunkKey here = ChunkKey.of(at);
         Claim current = plugin.claims().getClaimAt(here);
-        if (current != null && !current.isTrusted(p)) {
+        if (current != null && !current.canEnter(p)) {
             return; // already inside (should not happen); let them walk out
         }
         double radius = cfg().pushRadius();
@@ -135,7 +176,7 @@ public final class EntryGuard implements Listener {
                 }
                 ChunkKey key = here.offset(dx, dz);
                 Claim claim = plugin.claims().getClaimAt(key);
-                if (claim == null || claim.isTrusted(p)) {
+                if (claim == null || claim.canEnter(p)) {
                     continue;
                 }
                 double nx = Math.max(key.minBlockX(), Math.min(key.minBlockX() + 16, px));
@@ -173,7 +214,7 @@ public final class EntryGuard implements Listener {
         Claim target = plugin.claims().getClaimAt(e.getTo());
         // Same rule as walking: a teleport that stays inside the claim the player is already in (including the
         // server's own rubber-band after a denied move) is not an entry.
-        if (target != null && !target.isTrusted(p) && plugin.claims().getClaimAt(e.getFrom()) != target) {
+        if (target != null && !target.canEnter(p) && plugin.claims().getClaimAt(e.getFrom()) != target) {
             e.setCancelled(true);
             plugin.sendCooled(p, "entry", cfg().msg("entry-denied", "owner", target.getOwnerName()));
         }
@@ -190,7 +231,7 @@ public final class EntryGuard implements Listener {
                 return;
             }
             Claim claim = plugin.claims().getClaimAt(p.getLocation());
-            if (claim != null && !claim.isTrusted(p)) {
+            if (claim != null && !claim.canEnter(p)) {
                 eject(p, claim);
             }
         }, 2L);
@@ -217,7 +258,7 @@ public final class EntryGuard implements Listener {
         Vehicle vehicle = e.getVehicle();
         List<Player> offenders = new ArrayList<>();
         for (Entity passenger : vehicle.getPassengers()) {
-            if (passenger instanceof Player p && !target.isTrusted(p) && !exempt(p)) {
+            if (passenger instanceof Player p && !target.canEnter(p) && !exempt(p)) {
                 offenders.add(p);
             }
         }
@@ -255,7 +296,7 @@ public final class EntryGuard implements Listener {
                 return;
             }
             Claim claim = plugin.claims().getClaimAt(p.getLocation());
-            if (claim != null && !claim.isTrusted(p)) {
+            if (claim != null && !claim.canEnter(p)) {
                 eject(p, claim);
             }
         }, 10L);
@@ -270,7 +311,7 @@ public final class EntryGuard implements Listener {
             return;
         }
         for (Player p : world.getPlayers()) {
-            if (ChunkKey.of(p.getLocation()).equals(change.chunk()) && !change.claim().isTrusted(p) && !exempt(p)) {
+            if (ChunkKey.of(p.getLocation()).equals(change.chunk()) && !change.claim().canEnter(p) && !exempt(p)) {
                 eject(p, change.claim());
             }
         }

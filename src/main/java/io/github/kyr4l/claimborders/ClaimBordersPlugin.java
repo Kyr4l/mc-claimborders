@@ -62,6 +62,9 @@ public final class ClaimBordersPlugin extends JavaPlugin {
             borders.shutdown();
             borders = null;
         }
+        if (entryGuard != null) {
+            entryGuard.shutdown();
+        }
         HandlerList.unregisterAll(this);
         Bukkit.getScheduler().cancelTasks(this);
         if (claims != null) {

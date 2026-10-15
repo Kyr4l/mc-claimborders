@@ -10,14 +10,18 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * All chunks owned by one player, plus the players they trust.
+ * All chunks owned by one player, plus the players they trust and at which level.
  * A claim does not have to be contiguous.
  */
 public final class Claim {
 
+    /** A trusted player: the name they had when trusted (no lookups needed later) and their level. */
+    public record Trusted(String name, TrustLevel level) {
+    }
+
     private final UUID owner;
     private String ownerName;
-    private final Map<UUID, String> trusted = new LinkedHashMap<>();
+    private final Map<UUID, Trusted> trusted = new LinkedHashMap<>();
     private final Set<ChunkKey> chunks = new LinkedHashSet<>();
 
     public Claim(UUID owner, String ownerName) {
@@ -37,12 +41,8 @@ public final class Claim {
         this.ownerName = ownerName;
     }
 
-    public Set<UUID> getTrusted() {
-        return Collections.unmodifiableSet(trusted.keySet());
-    }
-
-    /** Trusted players with the name they had when trusted (no lookups needed). */
-    public Map<UUID, String> getTrustedNames() {
+    /** Everyone trusted at any level, excluding the owner. */
+    public Map<UUID, Trusted> getTrusted() {
         return Collections.unmodifiableMap(trusted);
     }
 
@@ -54,12 +54,30 @@ public final class Claim {
         return owner.equals(id);
     }
 
+    public TrustLevel levelOf(UUID id) {
+        if (owner.equals(id)) {
+            return TrustLevel.MEMBER;
+        }
+        Trusted t = trusted.get(id);
+        return t == null ? TrustLevel.NONE : t.level();
+    }
+
+    public TrustLevel levelOf(Player player) {
+        return levelOf(player.getUniqueId());
+    }
+
+    /** Full access: owner or member. */
     public boolean isTrusted(UUID id) {
-        return owner.equals(id) || trusted.containsKey(id);
+        return levelOf(id) == TrustLevel.MEMBER;
     }
 
     public boolean isTrusted(Player player) {
         return isTrusted(player.getUniqueId());
+    }
+
+    /** Owner, member or visitor. */
+    public boolean canEnter(Player player) {
+        return levelOf(player.getUniqueId()).canEnter();
     }
 
     public boolean contains(ChunkKey key) {
@@ -88,13 +106,13 @@ public final class Claim {
         return chunks.remove(key);
     }
 
-    boolean addTrusted(UUID id, String name) {
-        if (owner.equals(id)) {
+    /** Returns true if something changed (new entry or a different level). */
+    boolean setTrusted(UUID id, String name, TrustLevel level) {
+        if (owner.equals(id) || level == TrustLevel.NONE) {
             return false;
         }
-        boolean added = !trusted.containsKey(id);
-        trusted.put(id, name == null ? "?" : name);
-        return added;
+        Trusted previous = trusted.put(id, new Trusted(name == null ? "?" : name, level));
+        return previous == null || previous.level() != level;
     }
 
     boolean removeTrusted(UUID id) {

@@ -5,6 +5,7 @@ import io.github.kyr4l.claimborders.ClaimConfig;
 import io.github.kyr4l.claimborders.claim.ChunkKey;
 import io.github.kyr4l.claimborders.claim.Claim;
 import io.github.kyr4l.claimborders.claim.ClaimManager;
+import io.github.kyr4l.claimborders.claim.TrustLevel;
 import io.github.kyr4l.claimborders.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -22,7 +23,7 @@ import java.util.function.Consumer;
 public final class ClaimCommand implements TabExecutor {
 
     private static final List<String> SUBS = List.of(
-            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "admin");
+            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "admin");
 
     private final ClaimBordersPlugin plugin;
 
@@ -73,6 +74,7 @@ public final class ClaimCommand implements TabExecutor {
             case "list" -> list(p);
             case "map" -> map(p);
             case "show" -> show(p);
+            case "view" -> view(p, args);
             default -> help(p);
         }
         return true;
@@ -83,11 +85,13 @@ public final class ClaimCommand implements TabExecutor {
         p.sendMessage(Text.color("&b/claim &7- claim the chunk you stand in"));
         p.sendMessage(Text.color("&b/claim unclaim &7- release this chunk"));
         p.sendMessage(Text.color("&b/claim unclaimall confirm &7- release every chunk you own"));
-        p.sendMessage(Text.color("&b/claim trust <player> &7/ &buntrust <player> &7/ &btrustlist"));
+        p.sendMessage(Text.color("&b/claim trust <player> [member|visitor] &7- member: full access; visitor: may enter, read-only"));
+        p.sendMessage(Text.color("&b/claim untrust <player> &7/ &btrustlist"));
         p.sendMessage(Text.color("&b/claim info &7- who owns this chunk"));
         p.sendMessage(Text.color("&b/claim list &7- your chunks"));
         p.sendMessage(Text.color("&b/claim map &7- chunk map around you"));
         p.sendMessage(Text.color("&b/claim show &7- toggle your border display"));
+        p.sendMessage(Text.color("&b/claim view member|visitor|outsider|off &7- preview how borders look for that level"));
         if (p.hasPermission("claimborders.admin")) {
             p.sendMessage(Text.color("&b/claim admin unclaim|unclaimall <player>|reload|stats"));
         }
@@ -132,7 +136,12 @@ public final class ClaimCommand implements TabExecutor {
 
     private void trust(Player p, String[] args, boolean add) {
         if (args.length < 2) {
-            p.sendMessage(Text.color("&cUsage: /claim " + (add ? "trust" : "untrust") + " <player>"));
+            p.sendMessage(Text.color("&cUsage: /claim " + (add ? "trust <player> [member|visitor]" : "untrust <player>")));
+            return;
+        }
+        TrustLevel level = args.length > 2 ? TrustLevel.parse(args[2], null) : TrustLevel.MEMBER;
+        if (add && (level == null || level == TrustLevel.NONE)) {
+            p.sendMessage(Text.color("&cLevel must be &fmember&c or &fvisitor&c."));
             return;
         }
         Claim claim = claims().getClaimOf(p.getUniqueId());
@@ -154,10 +163,10 @@ public final class ClaimCommand implements TabExecutor {
                     p.sendMessage(Text.color("&7You are already the owner."));
                     return;
                 }
-                if (claims().trust(claim, target.getUniqueId(), name)) {
-                    p.sendMessage(cfg().msg("trusted", "player", name));
+                if (claims().trust(claim, target.getUniqueId(), name, level)) {
+                    p.sendMessage(cfg().msg(level == TrustLevel.VISITOR ? "trusted-visitor" : "trusted", "player", name));
                 } else {
-                    p.sendMessage(Text.color("&7" + name + " is already trusted."));
+                    p.sendMessage(Text.color("&7" + name + " already has that level."));
                 }
             } else {
                 if (claims().untrust(claim, target.getUniqueId())) {
@@ -170,7 +179,7 @@ public final class ClaimCommand implements TabExecutor {
             if (online != null) {
                 plugin.borders().refresh(online);
                 Claim here = claims().getClaimAt(online.getLocation());
-                if (!add && here == claim && !online.hasPermission("claimborders.bypass")) {
+                if (here == claim && !claim.canEnter(online) && !online.hasPermission("claimborders.bypass")) {
                     plugin.entryGuard().eject(online, claim);
                 }
             }
@@ -183,7 +192,14 @@ public final class ClaimCommand implements TabExecutor {
             p.sendMessage(Text.color("&7Nobody is trusted in your claim."));
             return;
         }
-        p.sendMessage(Text.color("&bTrusted: &f" + String.join(", ", claim.getTrustedNames().values())));
+        StringBuilder sb = new StringBuilder("&bTrusted: ");
+        boolean first = true;
+        for (Claim.Trusted t : claim.getTrusted().values()) {
+            sb.append(first ? "" : "&7, ").append(t.level() == TrustLevel.VISITOR ? "&e" : "&f").append(t.name())
+                    .append(t.level() == TrustLevel.VISITOR ? " &7(visitor)" : "");
+            first = false;
+        }
+        p.sendMessage(Text.color(sb.toString()));
     }
 
     private void info(Player p) {
@@ -193,8 +209,13 @@ public final class ClaimCommand implements TabExecutor {
             p.sendMessage(Text.color("&7Chunk &f" + key.x() + ", " + key.z() + " &7is free."));
             return;
         }
+        String standing = switch (claim.levelOf(p)) {
+            case MEMBER -> "&aYou are a member.";
+            case VISITOR -> "&eYou are a visitor (read-only).";
+            case NONE -> "&cYou are not trusted.";
+        };
         p.sendMessage(Text.color("&7Chunk &f" + key.x() + ", " + key.z() + " &7belongs to &b" + claim.getOwnerName()
-                + " &7(" + claim.size() + " chunks). " + (claim.isTrusted(p) ? "&aYou are trusted." : "&cYou are not trusted.")));
+                + " &7(" + claim.size() + " chunks). " + standing));
     }
 
     private void list(Player p) {
@@ -240,6 +261,21 @@ public final class ClaimCommand implements TabExecutor {
             }
             p.sendMessage(Text.color(row.toString()));
         }
+    }
+
+    /** Preview mode: render borders as if the player had the given level everywhere. Visual only. */
+    private void view(Player p, String[] args) {
+        String mode = args.length < 2 ? "" : args[1].toLowerCase(Locale.ROOT);
+        boolean off = mode.equals("off") || mode.equals("reset") || mode.equals("normal");
+        TrustLevel level = off ? null : TrustLevel.parse(mode, null);
+        if (!off && level == null) {
+            TrustLevel current = plugin.borders().getViewAs(p);
+            p.sendMessage(Text.color("&cUsage: /claim view member|visitor|outsider|off &7(preview only, the force field is unchanged). Now: &f"
+                    + (current == null ? "off" : current.name().toLowerCase(Locale.ROOT))));
+            return;
+        }
+        plugin.borders().setViewAs(p, level);
+        p.sendMessage(cfg().msg("view-mode", "mode", level == null ? "off" : level.name().toLowerCase(Locale.ROOT)));
     }
 
     private void show(Player p) {
@@ -315,6 +351,9 @@ public final class ClaimCommand implements TabExecutor {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         String lbl = command.getName().toLowerCase(Locale.ROOT);
         if (lbl.equals("trust") || lbl.equals("untrust")) {
+            if (args.length == 2 && lbl.equals("trust")) {
+                return List.of("member", "visitor").stream().filter(s -> s.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
+            }
             return args.length == 1 ? playerNames(args[0]) : List.of();
         }
         if (lbl.equals("unclaim")) {
@@ -334,6 +373,12 @@ public final class ClaimCommand implements TabExecutor {
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("trust") || args[0].equalsIgnoreCase("untrust"))) {
             return playerNames(args[1]);
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("trust")) {
+            return List.of("member", "visitor").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("view")) {
+            return List.of("member", "visitor", "outsider", "off").stream().filter(s -> s.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("admin")) {
             return List.of("unclaim", "unclaimall", "reload", "stats").stream()

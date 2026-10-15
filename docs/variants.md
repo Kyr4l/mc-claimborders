@@ -7,7 +7,7 @@ All variants ship in the plugin and are selected in `config.yml`. `/claim admin 
 | | PARTICLES | GHOST_BLOCKS | DISPLAY |
 | --- | --- | --- | --- |
 | What it is | Per-player particles: horizontal lines at the viewer's height along each nearby edge, vertical posts at chunk corners | Per-player fake blocks: outsiders see a stained-glass wall band around their height; members with `/claim show` see a lit outline on the ground | Non-persistent `BlockDisplay` panels per straight run of border (up to 8 chunks), scaled to (run length) × (world height) × 0.08: a seamless translucent wall. Two panels per run, `material` for members and `foreign-material` for outsiders; each player is shown only theirs |
-| Who sees it | Players within `border.radius` (48); members only with `/claim show` | Players within `border.ghost-blocks.radius` (32); members get the outline | Everyone (`reveal: ALWAYS`) or within `reveal-radius` (`NEAR`); members hidden by default |
+| Who sees it | Players within `border.radius` (48); members only with `/claim show`. Blue / yellow / red for members / visitors / outsiders | Players within `border.ghost-blocks.radius` (32); members and visitors get a ground outline, outsiders the wall | Everyone (`reveal: ALWAYS`) or within `reveal-radius` (`NEAR`); members hidden by default. Blue / yellow / red panels per standing |
 | Server cost | ~45 particles per edge per 10 ticks per nearby player | Block-change packets only for the diff; nothing when standing still | Two entities per straight run (a 4×4 claim has 8); no per-tick work in `ALWAYS` |
 | Collision | None (entry guard does it) | Client-side: outsiders bump into the fake wall before the server reacts | None |
 | Version | Any | Any | 1.19.4+, else falls back to particles |
@@ -28,6 +28,12 @@ somebody approaches; `PARTICLES` as the fallback.
 Common to all modes: teleports into a claim are cancelled (`block-teleports`), vanilla vehicles drop
 outsiders at the line (`block-vehicles`), claiming a chunk ejects intruders (`eject-on-claim`), logging in
 inside a claim ejects too (`eject-on-join`). A player who is already inside a claim can always walk out.
+
+## Previewing
+
+`/claim view member|visitor|outsider` renders every border as if you had that standing, so an owner can check
+what a visitor or an outsider sees without a second account. `/claim view off` restores normal rendering.
+The force field itself is never affected.
 
 ## Rejected variants
 

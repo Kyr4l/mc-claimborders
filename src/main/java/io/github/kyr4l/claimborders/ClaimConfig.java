@@ -44,6 +44,7 @@ public final class ClaimConfig {
     private final double pushStrength;
     private final boolean blockTeleports;
     private final boolean blockVehicles;
+    private final boolean visitorGlow;
     private final int messageCooldownMillis;
 
     // border
@@ -55,6 +56,7 @@ public final class ClaimConfig {
     private final String particleType;
     private final Color particleColor;
     private final Color particleForeignColor;
+    private final Color particleVisitorColor;
     private final float particleSize;
     private final double particleStep;
     private final List<Integer> particleLayers;
@@ -64,10 +66,12 @@ public final class ClaimConfig {
     private final int ghostWallBelow;
     private final int ghostWallAbove;
     private final Material ghostOutlineMaterial;
+    private final Material ghostVisitorOutlineMaterial;
     private final int ghostRadius;
 
     private final Material displayMaterial;
     private final Material displayForeignMaterial;
+    private final Material displayVisitorMaterial;
     private final int displayHeight; // -1 = FULL
     private final float displayThickness;
     private final boolean displayGlow;
@@ -102,6 +106,7 @@ public final class ClaimConfig {
         pushStrength = c.getDouble("forcefield.push-strength", 0.35);
         blockTeleports = c.getBoolean("forcefield.block-teleports", true);
         blockVehicles = c.getBoolean("forcefield.block-vehicles", true);
+        visitorGlow = c.getBoolean("forcefield.visitor-glow", true);
         messageCooldownMillis = (int) (c.getDouble("forcefield.message-cooldown-seconds", 2.0) * 1000);
 
         renderer = parseEnum(RendererType.class, c.getString("border.renderer"), RendererType.DISPLAY, log);
@@ -112,6 +117,7 @@ public final class ClaimConfig {
         particleType = c.getString("border.particles.type", "DUST");
         particleColor = Text.parseColor(c.getString("border.particles.color"), Color.fromRGB(0x4FC3F7));
         particleForeignColor = Text.parseColor(c.getString("border.particles.foreign-color"), Color.fromRGB(0xFF5252));
+        particleVisitorColor = Text.parseColor(c.getString("border.particles.visitor-color"), Color.fromRGB(0xFFEE58));
         particleSize = (float) c.getDouble("border.particles.size", 1.3);
         particleStep = Math.max(0.25, c.getDouble("border.particles.step", 1.0));
         List<Integer> layers = c.getIntegerList("border.particles.layers");
@@ -122,10 +128,12 @@ public final class ClaimConfig {
         ghostWallBelow = Math.max(0, c.getInt("border.ghost-blocks.wall-below", 3));
         ghostWallAbove = Math.max(1, c.getInt("border.ghost-blocks.wall-above", 4));
         ghostOutlineMaterial = parseMaterial(c.getString("border.ghost-blocks.outline-material"), Material.SEA_LANTERN, log);
+        ghostVisitorOutlineMaterial = parseMaterial(c.getString("border.ghost-blocks.visitor-outline-material"), Material.GLOWSTONE, log);
         ghostRadius = Math.max(8, c.getInt("border.ghost-blocks.radius", 32));
 
         displayMaterial = parseMaterial(c.getString("border.display.material"), Material.LIGHT_BLUE_STAINED_GLASS_PANE, log);
         displayForeignMaterial = parseMaterial(c.getString("border.display.foreign-material"), Material.RED_STAINED_GLASS_PANE, log);
+        displayVisitorMaterial = parseMaterial(c.getString("border.display.visitor-material"), Material.YELLOW_STAINED_GLASS_PANE, log);
         String h = String.valueOf(c.get("border.display.height", "FULL")).trim();
         int parsedHeight;
         try {
@@ -205,6 +213,7 @@ public final class ClaimConfig {
     public double pushStrength() { return pushStrength; }
     public boolean blockTeleports() { return blockTeleports; }
     public boolean blockVehicles() { return blockVehicles; }
+    public boolean visitorGlow() { return visitorGlow; }
     public int messageCooldownMillis() { return messageCooldownMillis; }
 
     public RendererType renderer() { return renderer; }
@@ -215,6 +224,7 @@ public final class ClaimConfig {
     public String particleType() { return particleType; }
     public Color particleColor() { return particleColor; }
     public Color particleForeignColor() { return particleForeignColor; }
+    public Color particleVisitorColor() { return particleVisitorColor; }
     public float particleSize() { return particleSize; }
     public double particleStep() { return particleStep; }
     public List<Integer> particleLayers() { return particleLayers; }
@@ -224,10 +234,12 @@ public final class ClaimConfig {
     public int ghostWallBelow() { return ghostWallBelow; }
     public int ghostWallAbove() { return ghostWallAbove; }
     public Material ghostOutlineMaterial() { return ghostOutlineMaterial; }
+    public Material ghostVisitorOutlineMaterial() { return ghostVisitorOutlineMaterial; }
     public int ghostRadius() { return ghostRadius; }
 
     public Material displayMaterial() { return displayMaterial; }
     public Material displayForeignMaterial() { return displayForeignMaterial; }
+    public Material displayVisitorMaterial() { return displayVisitorMaterial; }
     public int displayHeight() { return displayHeight; }
     public float displayThickness() { return displayThickness; }
     public boolean displayGlow() { return displayGlow; }

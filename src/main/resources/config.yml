@@ -37,6 +37,9 @@ forcefield:
   push-strength: 0.35     # PUSH: strength at the border, fades out towards push-radius
   block-teleports: true   # ender pearls, chorus fruit, /tp into a foreign claim
   block-vehicles: true    # boats, minecarts, horses cannot carry outsiders in
+  # Visitors (read-only trust) glow while they are inside the claim. Vanilla sends the glow flag to every
+  # client, so everyone sees it, not only the owner.
+  visitor-glow: true
   message-cooldown-seconds: 2
 
 border:
@@ -56,6 +59,7 @@ border:
     type: DUST            # DUST (colored), END_ROD, FLAME, SOUL_FIRE_FLAME, ELECTRIC_SPARK, WAX_ON ...
     color: "#4FC3F7"      # own/trusted claims (DUST only)
     foreign-color: "#FF5252"
+    visitor-color: "#FFEE58"
     size: 1.3
     step: 1.0             # spacing along the line, in blocks
     layers: [0, 2]        # horizontal lines at (feet y + offset)
@@ -66,13 +70,15 @@ border:
     wall-below: 3
     wall-above: 4
     outline-material: SEA_LANTERN            # members with /claim show: fake blocks on the ground along the border
+    visitor-outline-material: GLOWSTONE      # visitors: ground outline (no wall, they may enter)
     radius: 32
 
   display:
     # A *_STAINED_GLASS_PANE gives a flat, uniform tint. A full block (e.g. LIGHT_BLUE_STAINED_GLASS, ICE)
     # stretches its whole texture over the panel, frame included.
-    # material: what members of the claim see. foreign-material: what everyone else sees.
+    # material: what members of the claim see. visitor-material: read-only visitors. foreign-material: everyone else.
     material: LIGHT_BLUE_STAINED_GLASS_PANE
+    visitor-material: YELLOW_STAINED_GLASS_PANE
     foreign-material: RED_STAINED_GLASS_PANE
     # FULL = from the world's lowest to highest Y. A number = panel height, placed 2 blocks under the surface.
     height: FULL
@@ -101,7 +107,9 @@ messages:
   not-yours: "&cYou do not own this chunk."
   entry-denied: "&cThis land belongs to &f%owner%&c. You are not allowed in."
   action-denied: "&cYou cannot do that in &f%owner%&c's claim."
-  trusted: "&a%player% is now trusted in your claim."
+  trusted: "&a%player% is now a member of your claim."
+  trusted-visitor: "&a%player% may now visit your claim (read-only)."
+  view-mode: "&7Border preview: &f%mode%"
   untrusted: "&e%player% is no longer trusted."
   ejected: "&eYou were moved out of &f%owner%&e's claim."
   show-on: "&aClaim borders shown."

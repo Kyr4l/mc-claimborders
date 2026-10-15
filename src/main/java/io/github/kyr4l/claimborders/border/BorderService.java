@@ -7,6 +7,7 @@ import io.github.kyr4l.claimborders.claim.BoundaryEdge;
 import io.github.kyr4l.claimborders.claim.ChunkKey;
 import io.github.kyr4l.claimborders.claim.Claim;
 import io.github.kyr4l.claimborders.claim.ClaimManager;
+import io.github.kyr4l.claimborders.claim.TrustLevel;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -22,7 +23,9 @@ import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -35,6 +38,8 @@ public final class BorderService implements Listener {
 
     private final ClaimBordersPlugin plugin;
     private final Set<UUID> showing;
+    /** /claim view: pretend to be this level in every claim (visual only). */
+    private final Map<UUID, TrustLevel> viewAs = new HashMap<>();
     private BorderRenderer renderer;
     private BukkitTask task;
     private final Consumer<ClaimManager.ClaimChange> claimListener = change -> {
@@ -120,6 +125,29 @@ public final class BorderService implements Listener {
         return now;
     }
 
+    /** The viewer's standing in a claim for rendering purposes: the /claim view override, else the real one. */
+    public TrustLevel relationOf(Player player, Claim claim) {
+        TrustLevel override = viewAs.get(player.getUniqueId());
+        if (override != null) {
+            return override;
+        }
+        return claim == null ? TrustLevel.NONE : claim.levelOf(player);
+    }
+
+    public TrustLevel getViewAs(Player player) {
+        return viewAs.get(player.getUniqueId());
+    }
+
+    /** Sets or clears (null) the preview level and re-renders for the player. */
+    public void setViewAs(Player player, TrustLevel level) {
+        if (level == null) {
+            viewAs.remove(player.getUniqueId());
+        } else {
+            viewAs.put(player.getUniqueId(), level);
+        }
+        refresh(player);
+    }
+
     /** Re-applies what this player should see (trust changed, world changed...). */
     public void refresh(Player player) {
         if (renderer != null) {
@@ -177,13 +205,13 @@ public final class BorderService implements Listener {
                 if (claim == null) {
                     continue;
                 }
-                boolean trusted = claim.isTrusted(player);
-                if (trusted && !showing) {
+                TrustLevel level = relationOf(player, claim);
+                if (level == TrustLevel.MEMBER && !showing) {
                     continue;
                 }
                 for (BoundaryEdge edge : BoundaryCalculator.edgesOf(claim, key)) {
                     if (edge.distanceSquared(px, pz) <= r2) {
-                        out.add(new EdgeView(edge, claim, trusted));
+                        out.add(new EdgeView(edge, claim, level));
                     }
                 }
             }
@@ -203,6 +231,7 @@ public final class BorderService implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
         showing.remove(e.getPlayer().getUniqueId());
+        viewAs.remove(e.getPlayer().getUniqueId());
         plugin.forgetCooldown(e.getPlayer());
         if (renderer != null) {
             renderer.clear(e.getPlayer());

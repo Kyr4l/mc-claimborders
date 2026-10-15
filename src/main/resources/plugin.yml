@@ -8,14 +8,14 @@ description: Claim chunks one by one and protect them behind a visible force fie
 commands:
   claim:
     description: Claim the chunk you stand in, or manage your claim.
-    usage: /<command> [help|unclaim|unclaimall|trust|untrust|trustlist|info|list|map|show|admin]
+    usage: /<command> [help|unclaim|unclaimall|trust|untrust|trustlist|info|list|map|show|view|admin]
     aliases: [claims, cb]
   unclaim:
     description: Unclaim the chunk you stand in.
     usage: /<command>
   trust:
-    description: Allow a player into your claim.
-    usage: /<command> <player>
+    description: Allow a player into your claim (member = full access, visitor = may enter, read-only).
+    usage: /<command> <player> [member|visitor]
   untrust:
     description: Remove a player from your claim.
     usage: /<command> <player>

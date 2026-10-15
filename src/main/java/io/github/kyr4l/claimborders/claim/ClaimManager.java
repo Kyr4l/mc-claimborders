@@ -54,7 +54,7 @@ public final class ClaimManager {
             Claim existing = byOwner.get(claim.getOwner());
             if (existing != null) {
                 plugin.getLogger().warning("Owner " + claim.getOwnerName() + " is listed twice; merging.");
-                claim.getTrustedNames().forEach(existing::addTrusted);
+                claim.getTrusted().forEach((id, t) -> existing.setTrusted(id, t.name(), t.level()));
                 for (ChunkKey key : new ArrayList<>(claim.getChunks())) {
                     existing.addChunk(key);
                 }
@@ -156,7 +156,7 @@ public final class ClaimManager {
     /** True if the player may be inside / act in the chunk: unclaimed, trusted, or bypass permission. */
     public boolean canAccess(Player player, ChunkKey key) {
         Claim claim = byChunk.get(key);
-        return claim == null || claim.isTrusted(player) || player.hasPermission("claimborders.bypass");
+        return claim == null || claim.canEnter(player) || player.hasPermission("claimborders.bypass");
     }
 
     public boolean canAccess(Player player, Location location) {
@@ -249,8 +249,8 @@ public final class ClaimManager {
         return keys.size();
     }
 
-    public boolean trust(Claim claim, UUID target, String name) {
-        if (claim.addTrusted(target, name)) {
+    public boolean trust(Claim claim, UUID target, String name, TrustLevel level) {
+        if (claim.setTrusted(target, name, level)) {
             markDirty();
             return true;
         }
