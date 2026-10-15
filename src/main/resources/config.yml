@@ -1,0 +1,100 @@
+# ClaimBorders configuration
+# Every option is read on /claim admin reload. Renderers restart cleanly on reload.
+
+claims:
+  # Chunks a player may own. Override per player/group with the permission
+  # claimborders.limit.<number> (e.g. claimborders.limit.64) or claimborders.limit.unlimited.
+  max-chunks: 16
+  # A new chunk must touch one you already own (your first chunk is free to go anywhere).
+  require-adjacent: true
+  # Worlds where claiming is allowed. Empty list = every world.
+  allowed-worlds: []
+  # Worlds where claiming is never allowed.
+  blocked-worlds: []
+  # When a chunk gets claimed, non-trusted players standing inside are moved to the nearest free chunk.
+  eject-on-claim: true
+  # Same thing on login: a non-trusted player who logs in inside a claim is moved out.
+  eject-on-join: true
+
+protection:
+  blocks: true        # break / place / buckets
+  interact: true      # doors, chests, buttons, levers, pressure plates, trampling...
+  entities: true      # outsiders cannot hurt animals, villagers, armor stands, item frames...
+  explosions: true    # explosions do not destroy claimed blocks
+  pvp: false          # true = no PvP inside claims
+  # Mod fake players (Create Deployers, other Forge FakePlayers) are never treated as intruders.
+  # Keep this on with Create, or Deployers inside your own base would be blocked as "outsiders".
+  ignore-fake-players: true
+
+forcefield:
+  enabled: true
+  # HARD   : the border is a wall, movement into the claim is simply stopped.
+  # BOUNCE : stopped and knocked back (like hitting a shield).
+  # PUSH   : a soft repulsion zone starts push-radius blocks before the border, and the line itself still stops you.
+  mode: BOUNCE
+  knockback: 0.6          # BOUNCE horizontal strength
+  push-radius: 3.0        # PUSH: how far from the border the repulsion starts
+  push-strength: 0.35     # PUSH: strength at the border, fades out towards push-radius
+  block-teleports: true   # ender pearls, chorus fruit, /tp into a foreign claim
+  block-vehicles: true    # boats, minecarts, horses cannot carry outsiders in
+  message-cooldown-seconds: 2
+
+border:
+  # PARTICLES : per-player particle lines + corner posts, only near the viewer. Cheapest, works everywhere.
+  # GHOST_BLOCKS : per-player fake blocks. Outsiders see a glass wall around their height, members see a ground outline.
+  # DISPLAY : real (non-persistent) BlockDisplay panels per boundary edge: a translucent wall from bedrock to sky, visible to everyone. Needs 1.19.4+.
+  # NONE : no visual border (the force field still works).
+  renderer: PARTICLES
+  # Members see their own borders without typing /claim show.
+  show-own-by-default: false
+  # Blocks around a player in which borders are drawn (PARTICLES / GHOST_BLOCKS).
+  radius: 48
+  # How often per-player renderers refresh.
+  interval-ticks: 10
+
+  particles:
+    type: DUST            # DUST (colored), END_ROD, FLAME, SOUL_FIRE_FLAME, ELECTRIC_SPARK, WAX_ON ...
+    color: "#4FC3F7"      # own/trusted claims (DUST only)
+    foreign-color: "#FF5252"
+    size: 1.3
+    step: 1.0             # spacing along the line, in blocks
+    layers: [0, 2]        # horizontal lines at (feet y + offset)
+    vertical-span: 6      # corner posts go from y-span to y+span
+
+  ghost-blocks:
+    wall-material: LIGHT_BLUE_STAINED_GLASS   # outsiders: a fake wall band around their height
+    wall-below: 3
+    wall-above: 4
+    outline-material: SEA_LANTERN            # members with /claim show: fake blocks on the ground along the border
+    radius: 32
+
+  display:
+    material: LIGHT_BLUE_STAINED_GLASS
+    # FULL = from the world's lowest to highest Y. A number = panel height, placed 2 blocks under the surface.
+    height: FULL
+    thickness: 0.08
+    glow: false
+    glow-color: "#4FC3F7"
+    hide-from-trusted: true
+    # ALWAYS : panels are visible to anyone (except trusted members when hide-from-trusted is on).
+    # NEAR   : panels are invisible until a player comes within reveal-radius blocks.
+    reveal: ALWAYS
+    reveal-radius: 24
+
+messages:
+  prefix: "&b[Claims]&r "
+  claimed: "&aChunk claimed! &7(%count%/%limit%)"
+  unclaimed: "&eChunk unclaimed. &7(%count%/%limit%)"
+  already-own: "&7You already own this chunk."
+  taken: "&cThis chunk belongs to &f%owner%&c."
+  limit: "&cYou reached your limit of &f%limit%&c chunks."
+  not-adjacent: "&cNew chunks must touch one you already own."
+  world-disabled: "&cClaiming is disabled in this world."
+  not-yours: "&cYou do not own this chunk."
+  entry-denied: "&cThis land belongs to &f%owner%&c. You are not allowed in."
+  action-denied: "&cYou cannot do that in &f%owner%&c's claim."
+  trusted: "&a%player% is now trusted in your claim."
+  untrusted: "&e%player% is no longer trusted."
+  ejected: "&eYou were moved out of &f%owner%&e's claim."
+  show-on: "&aClaim borders shown."
+  show-off: "&7Claim borders hidden."

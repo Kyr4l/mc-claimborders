@@ -1,0 +1,21 @@
+# Build output
+target/
+build/
+out/
+*.jar
+!gradle/wrapper/*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local test server (if you keep one in the repo)
+run/

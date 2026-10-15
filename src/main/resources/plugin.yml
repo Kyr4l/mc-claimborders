@@ -1,0 +1,36 @@
+name: ClaimBorders
+version: '${project.version}'
+main: io.github.kyr4l.claimborders.ClaimBordersPlugin
+api-version: '1.19'
+author: Kyr4l
+description: Claim chunks one by one and protect them behind a visible force field.
+
+commands:
+  claim:
+    description: Claim the chunk you stand in, or manage your claim.
+    usage: /<command> [help|unclaim|unclaimall|trust|untrust|trustlist|info|list|map|show|admin]
+    aliases: [claims, cb]
+  unclaim:
+    description: Unclaim the chunk you stand in.
+    usage: /<command>
+  trust:
+    description: Allow a player into your claim.
+    usage: /<command> <player>
+  untrust:
+    description: Remove a player from your claim.
+    usage: /<command> <player>
+
+permissions:
+  claimborders.use:
+    description: Claim chunks and manage your own claim.
+    default: true
+  claimborders.admin:
+    description: Force-unclaim chunks, reload the plugin.
+    default: op
+  claimborders.bypass:
+    description: Walk through force fields and ignore claim protection.
+    default: op
+  claimborders.limit.unlimited:
+    description: No chunk limit.
+    default: false
+  # claimborders.limit.<number> overrides claims.max-chunks for that player.

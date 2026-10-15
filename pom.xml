@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.github.kyr4l</groupId>
+  <artifactId>claimborders</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>ClaimBorders</name>
+  <description>Chunk claiming with a visible force-field border for Bukkit/Spigot-compatible servers.</description>
+
+  <properties>
+    <!-- Java 17 bytecode: runs on 1.18.2+ servers (Java 17) and 1.20.5+/1.21 servers (Java 21). -->
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Oldest API we compile against. The jar still runs on newer servers. -->
+    <spigot.api.version>1.20.1-R0.1-SNAPSHOT</spigot.api.version>
+  </properties>
+
+  <repositories>
+    <repository>
+      <id>spigotmc-repo</id>
+      <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+    </repository>
+    <repository>
+      <id>sonatype</id>
+      <url>https://oss.sonatype.org/content/groups/public/</url>
+    </repository>
+  </repositories>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.spigotmc</groupId>
+      <artifactId>spigot-api</artifactId>
+      <version>${spigot.api.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <!-- Gson ships inside every Minecraft server, so it is "provided", not shaded. -->
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.10.1</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>${project.name}-${project.version}</finalName>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.2</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
