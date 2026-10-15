@@ -213,19 +213,26 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
         ClaimConfig cfg = plugin.settings();
         float thickness = cfg.displayThickness();
+
+        // Terrain height along this edge. The entity's ORIGIN must sit in a chunk section the client actually
+        // renders (surface level): clients skip entities whose own section is occluded/unbuilt, and an origin at
+        // bedrock is exactly that. The model is then shifted down with a translation so it still spans the column.
+        int surface = world.getMinHeight();
+        for (int i = 0; i < 16; i++) {
+            surface = Math.max(surface, world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i)));
+        }
+        int originY = Math.min(world.getMaxHeight() - 2, surface + 1);
         int minY;
         int height;
         if (cfg.displayHeight() < 0) {
             minY = world.getMinHeight();
             height = world.getMaxHeight() - minY;
         } else {
-            int surface = world.getMinHeight();
-            for (int i = 0; i < 16; i++) {
-                surface = Math.max(surface, world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i)));
-            }
             minY = Math.max(world.getMinHeight(), surface - 2);
             height = cfg.displayHeight();
         }
+        float translationY = minY - originY;
+        float aboveOrigin = Math.max(2f, minY + height - originY);
 
         double x;
         double z;
@@ -240,16 +247,15 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             scale = new Vector3f(thickness, height, 16f);
         }
 
-        Location loc = new Location(world, x, minY, z);
+        Location loc = new Location(world, x, originY, z);
         BlockDisplay display = world.spawn(loc, BlockDisplay.class);
         display.setBlock(cfg.displayMaterial().createBlockData());
-        display.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), scale, new Quaternionf()));
+        display.setTransformation(new Transformation(new Vector3f(0f, translationY, 0f), new Quaternionf(), scale, new Quaternionf()));
         display.setBrightness(new Display.Brightness(15, 15));
         display.setDisplayWidth(32f);
-        display.setDisplayHeight(height + 2f);
-        // The client draws a display entity only within viewRange * 64 blocks of its ORIGIN, measured in 3D.
-        // A full-height panel starts at bedrock, so the range must cover the whole column plus some margin.
-        display.setViewRange(Math.max(1.5f, Math.min(16f, (height + 160f) / 64f)));
+        display.setDisplayHeight(aboveOrigin + 1f);
+        // The client draws a display entity only within viewRange * 64 blocks of its origin, measured in 3D.
+        display.setViewRange(Math.max(2f, Math.min(16f, (aboveOrigin + 128f) / 64f)));
         display.setPersistent(false);
         display.setInvulnerable(true);
         display.setSilent(true);
