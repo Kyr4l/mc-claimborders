@@ -6,9 +6,9 @@ All variants ship in the plugin and are selected in `config.yml`. `/claim admin 
 
 | | PARTICLES | GHOST_BLOCKS | DISPLAY |
 | --- | --- | --- | --- |
-| What it is | Per-player particles: horizontal lines at the viewer's height along each nearby edge, vertical posts at chunk corners | Per-player fake blocks: outsiders see a stained-glass wall band around their height; members with `/claim show` see a lit outline on the ground | One non-persistent `BlockDisplay` per perimeter edge, scaled to 16 × (world height) × 0.08: a translucent wall everyone sees |
+| What it is | Per-player particles: horizontal lines at the viewer's height along each nearby edge, vertical posts at chunk corners | Per-player fake blocks: outsiders see a stained-glass wall band around their height; members with `/claim show` see a lit outline on the ground | One non-persistent `BlockDisplay` per straight run of border (up to 8 chunks), scaled to (run length) × (world height) × 0.08: a seamless translucent wall everyone sees |
 | Who sees it | Players within `border.radius` (48); members only with `/claim show` | Players within `border.ghost-blocks.radius` (32); members get the outline | Everyone (`reveal: ALWAYS`) or within `reveal-radius` (`NEAR`); members hidden by default |
-| Server cost | ~45 particles per edge per 10 ticks per nearby player | Block-change packets only for the diff; nothing when standing still | One entity per edge; no per-tick work in `ALWAYS` |
+| Server cost | ~45 particles per edge per 10 ticks per nearby player | Block-change packets only for the diff; nothing when standing still | One entity per straight run (a 4×4 claim has 4); no per-tick work in `ALWAYS` |
 | Collision | None (entry guard does it) | Client-side: outsiders bump into the fake wall before the server reacts | None |
 | Version | Any | Any | 1.19.4+, else falls back to particles |
 | Cleanup | None needed | Fake blocks restored on leave/quit/unload | Entities tagged + non-persistent, removed on unload, swept on enable |

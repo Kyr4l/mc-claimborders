@@ -2,7 +2,6 @@ package io.github.kyr4l.claimborders.border;
 
 import io.github.kyr4l.claimborders.ClaimBordersPlugin;
 import io.github.kyr4l.claimborders.ClaimConfig;
-import io.github.kyr4l.claimborders.claim.BoundaryCalculator;
 import io.github.kyr4l.claimborders.claim.BoundaryEdge;
 import io.github.kyr4l.claimborders.claim.ChunkKey;
 import io.github.kyr4l.claimborders.claim.Claim;
@@ -24,23 +23,59 @@ import org.joml.Vector3f;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
- * One scaled, translucent BlockDisplay panel per boundary edge: a real "force field" wall that
- * everyone sees, with no per-player packet work. Entities are non-persistent and tagged, so a
- * crash or a PlugManX unload never leaves garbage behind (we also sweep on start).
+ * Translucent BlockDisplay panels along claim borders: a "force field" wall everyone sees, with no
+ * per-player packet work. Every straight run of boundary (up to {@link #MAX_RUN} chunks) is one panel,
+ * so walls have no seams; gaps exist only at corners where they are hidden by the perpendicular panel.
+ * Entities are non-persistent and tagged, so a crash or a PlugManX unload never leaves garbage behind.
  * Needs Minecraft 1.19.4 or newer.
  */
 public final class DisplayEntityRenderer implements BorderRenderer {
 
+    /** Longest panel, in chunks. The panel lives in its first chunk, which must be loaded for it to exist. */
+    private static final int MAX_RUN = 8;
+
+    /** Gap between a panel and the chunk line, and between panels. Keeps faces off each other's planes. */
+    private static final float INSET = 0.025f;
+
+    /**
+     * One straight panel. {@code line} is the chunk row (north/south) or column (west/east) it runs along;
+     * {@code from..to} are the chunk coordinates along it. {@code shortenStart/End} are set on west/east
+     * runs whose end chunk also has a north/south panel occupying the corner.
+     */
+    private record Run(UUID owner, UUID world, BoundaryEdge.Side side, int line, int from, int to,
+                       boolean shortenStart, boolean shortenEnd) {
+
+        boolean alongX() {
+            return side == BoundaryEdge.Side.NORTH || side == BoundaryEdge.Side.SOUTH;
+        }
+
+        ChunkKey chunkAt(int coord) {
+            return alongX() ? new ChunkKey(world, coord, line) : new ChunkKey(world, line, coord);
+        }
+
+        ChunkKey originChunk() {
+            return chunkAt(from);
+        }
+
+        int length() {
+            return to - from + 1;
+        }
+    }
+
     private final ClaimBordersPlugin plugin;
     private final BorderService service;
     private final NamespacedKey tag;
-    private final Map<BoundaryEdge, UUID> entities = new HashMap<>();
+    private final Map<Run, UUID> entities = new HashMap<>();
+    private final Map<UUID, Set<Run>> runsByOwner = new HashMap<>();
+    private final Map<BoundaryEdge, Run> runByEdge = new HashMap<>();
     private final Map<UUID, Set<UUID>> shownNear = new HashMap<>();
 
     public DisplayEntityRenderer(ClaimBordersPlugin plugin, BorderService service) {
@@ -53,11 +88,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     public void start() {
         sweepLeftovers();
         for (Claim claim : plugin.claims().getClaims()) {
-            for (ChunkKey key : claim.getChunks()) {
-                if (key.isLoaded()) {
-                    syncChunk(key);
-                }
-            }
+            syncClaim(claim);
         }
     }
 
@@ -77,7 +108,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     public void render(Player viewer, List<EdgeView> edges) {
         Set<UUID> wanted = new HashSet<>();
         for (EdgeView view : edges) {
-            UUID id = entities.get(view.edge());
+            Run run = runByEdge.get(view.edge());
+            UUID id = run == null ? null : entities.get(run);
             if (id != null) {
                 wanted.add(id);
             }
@@ -123,8 +155,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         if (plugin.settings().displayReveal() != ClaimConfig.RevealMode.ALWAYS) {
             return;
         }
-        for (Map.Entry<BoundaryEdge, UUID> entry : entities.entrySet()) {
-            Claim claim = plugin.claims().getClaimAt(entry.getKey().chunk());
+        for (Map.Entry<Run, UUID> entry : entities.entrySet()) {
+            Claim claim = plugin.claims().getClaimOf(entry.getKey().owner());
             if (claim != null && claim.isTrusted(viewer)) {
                 applyVisibility(viewer, entry.getValue(), claim);
             }
@@ -133,9 +165,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     @Override
     public void onJoin(Player player) {
-        for (Map.Entry<BoundaryEdge, UUID> entry : entities.entrySet()) {
-            Claim claim = plugin.claims().getClaimAt(entry.getKey().chunk());
-            applyVisibility(player, entry.getValue(), claim);
+        for (Map.Entry<Run, UUID> entry : entities.entrySet()) {
+            applyVisibility(player, entry.getValue(), plugin.claims().getClaimOf(entry.getKey().owner()));
         }
     }
 
@@ -158,116 +189,204 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
     }
 
-    // ---- keeping entities in sync with claims and chunk loading -----------
+    // ---- keeping panels in sync with claims and chunk loading ---------------
 
     @Override
     public void onClaimChange(ClaimManager.ClaimChange change) {
-        ChunkKey key = change.chunk();
-        syncChunk(key);
+        Set<Claim> affected = new LinkedHashSet<>();
+        affected.add(change.claim());
         for (BoundaryEdge.Side side : BoundaryEdge.Side.values()) {
-            syncChunk(key.offset(side.dx, side.dz));
+            Claim neighbour = plugin.claims().getClaimAt(change.chunk().offset(side.dx, side.dz));
+            if (neighbour != null) {
+                affected.add(neighbour);
+            }
+        }
+        for (Claim claim : affected) {
+            syncClaim(claim);
         }
     }
 
     @Override
     public void onChunkLoad(Chunk chunk) {
         ChunkKey key = ChunkKey.of(chunk);
-        if (plugin.claims().getClaimAt(key) != null) {
-            syncChunk(key);
+        Claim claim = plugin.claims().getClaimAt(key);
+        if (claim == null) {
+            return;
+        }
+        for (Run run : runsByOwner.getOrDefault(claim.getOwner(), Set.of())) {
+            UUID id = entities.get(run);
+            if (run.originChunk().equals(key) && (id == null || Bukkit.getEntity(id) == null)) {
+                spawnRun(run);
+            }
         }
     }
 
     @Override
     public void onChunkUnload(Chunk chunk) {
         ChunkKey key = ChunkKey.of(chunk);
-        for (BoundaryEdge.Side side : BoundaryEdge.Side.values()) {
-            removeEdge(new BoundaryEdge(key, side));
-        }
-    }
-
-    /**
-     * Make the entities of this chunk match its current boundary edges. The length of a west/east panel
-     * depends on whether a north/south panel exists in the same chunk, so any change respawns the whole chunk.
-     */
-    private void syncChunk(ChunkKey key) {
-        if (!key.isLoaded()) {
+        Claim claim = plugin.claims().getClaimAt(key);
+        if (claim == null) {
             return;
         }
-        Set<BoundaryEdge> wanted = new HashSet<>(BoundaryCalculator.edgesOf(plugin.claims(), key));
-        Set<BoundaryEdge> alive = new HashSet<>();
-        for (BoundaryEdge.Side side : BoundaryEdge.Side.values()) {
-            BoundaryEdge edge = new BoundaryEdge(key, side);
-            UUID existing = entities.get(edge);
-            if (existing != null && Bukkit.getEntity(existing) != null) {
-                alive.add(edge);
-            } else if (existing != null) {
-                entities.remove(edge);
+        for (Run run : runsByOwner.getOrDefault(claim.getOwner(), Set.of())) {
+            if (run.originChunk().equals(key)) {
+                despawnRun(run);
             }
         }
-        if (alive.equals(wanted)) {
-            return;
+    }
+
+    /** Make the panels of this claim match its current perimeter. */
+    private void syncClaim(Claim claim) {
+        Set<Run> wanted = computeRuns(claim);
+        Set<Run> current = runsByOwner.getOrDefault(claim.getOwner(), Set.of());
+        for (Run run : new ArrayList<>(current)) {
+            if (!wanted.contains(run)) {
+                forgetRun(run);
+            }
         }
-        for (BoundaryEdge edge : alive) {
-            removeEdge(edge);
+        for (Run run : wanted) {
+            if (!current.contains(run)) {
+                registerRun(run);
+            }
         }
-        for (BoundaryEdge edge : wanted) {
-            spawnEdge(edge, wanted);
+        if (wanted.isEmpty()) {
+            runsByOwner.remove(claim.getOwner());
         }
     }
 
-    /** Gap kept between a panel and the chunk line, and between panels. Keeps faces off each other's planes. */
-    private static final float INSET = 0.025f;
+    private void registerRun(Run run) {
+        runsByOwner.computeIfAbsent(run.owner(), k -> new HashSet<>()).add(run);
+        for (int c = run.from(); c <= run.to(); c++) {
+            runByEdge.put(new BoundaryEdge(run.chunkAt(c), run.side()), run);
+        }
+        if (run.originChunk().isLoaded()) {
+            spawnRun(run);
+        }
+    }
 
-    private void spawnEdge(BoundaryEdge edge, Set<BoundaryEdge> chunkEdges) {
-        World world = edge.chunk().bukkitWorld();
-        if (world == null) {
+    private void forgetRun(Run run) {
+        despawnRun(run);
+        Set<Run> runs = runsByOwner.get(run.owner());
+        if (runs != null) {
+            runs.remove(run);
+        }
+        for (int c = run.from(); c <= run.to(); c++) {
+            runByEdge.remove(new BoundaryEdge(run.chunkAt(c), run.side()), run);
+        }
+    }
+
+    /** Groups the claim's boundary edges into straight runs. */
+    private static Set<Run> computeRuns(Claim claim) {
+        record Group(UUID world, BoundaryEdge.Side side, int line) {
+        }
+        Map<Group, TreeSet<Integer>> groups = new HashMap<>();
+        for (ChunkKey chunk : claim.getChunks()) {
+            for (BoundaryEdge.Side side : BoundaryEdge.Side.values()) {
+                if (claim.contains(chunk.offset(side.dx, side.dz))) {
+                    continue;
+                }
+                boolean alongX = side == BoundaryEdge.Side.NORTH || side == BoundaryEdge.Side.SOUTH;
+                int line = alongX ? chunk.z() : chunk.x();
+                int coord = alongX ? chunk.x() : chunk.z();
+                groups.computeIfAbsent(new Group(chunk.world(), side, line), k -> new TreeSet<>()).add(coord);
+            }
+        }
+        Set<Run> runs = new HashSet<>();
+        for (Map.Entry<Group, TreeSet<Integer>> entry : groups.entrySet()) {
+            Group g = entry.getKey();
+            boolean alongX = g.side() == BoundaryEdge.Side.NORTH || g.side() == BoundaryEdge.Side.SOUTH;
+            Integer start = null;
+            int previous = 0;
+            List<int[]> segments = new ArrayList<>();
+            for (int coord : entry.getValue()) {
+                if (start == null) {
+                    start = coord;
+                } else if (coord != previous + 1 || coord - start + 1 > MAX_RUN) {
+                    segments.add(new int[] {start, previous});
+                    start = coord;
+                }
+                previous = coord;
+            }
+            if (start != null) {
+                segments.add(new int[] {start, previous});
+            }
+            for (int[] seg : segments) {
+                boolean shortenStart = false;
+                boolean shortenEnd = false;
+                if (!alongX) {
+                    // A west/east panel yields the corner to the north/south panel of the same chunk.
+                    shortenStart = !claim.contains(new ChunkKey(g.world(), g.line(), seg[0]).offset(0, -1));
+                    shortenEnd = !claim.contains(new ChunkKey(g.world(), g.line(), seg[1]).offset(0, 1));
+                }
+                runs.add(new Run(claim.getOwner(), g.world(), g.side(), g.line(), seg[0], seg[1], shortenStart, shortenEnd));
+            }
+        }
+        return runs;
+    }
+
+    private void spawnRun(Run run) {
+        World world = Bukkit.getWorld(run.world());
+        if (world == null || !run.originChunk().isLoaded()) {
             return;
         }
         ClaimConfig cfg = plugin.settings();
         float thickness = cfg.displayThickness();
 
-        // Terrain height along this edge. The entity's ORIGIN must sit in a chunk section the client actually
-        // renders (surface level): clients skip entities whose own section is occluded/unbuilt, and an origin at
-        // bedrock is exactly that. The model is then shifted down with a translation so it still spans the column.
-        int surface = world.getMinHeight();
-        for (int i = 0; i < 16; i++) {
-            surface = Math.max(surface, world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i)));
+        // Terrain along the run, sampled only in loaded chunks (never force a chunk load from here).
+        int minSurface = Integer.MAX_VALUE;
+        int maxSurface = Integer.MIN_VALUE;
+        for (int c = run.from(); c <= run.to(); c++) {
+            ChunkKey chunk = run.chunkAt(c);
+            if (!chunk.isLoaded()) {
+                continue;
+            }
+            BoundaryEdge edge = new BoundaryEdge(chunk, run.side());
+            for (int i = 0; i < 16; i++) {
+                int y = world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i));
+                minSurface = Math.min(minSurface, y);
+                maxSurface = Math.max(maxSurface, y);
+            }
         }
-        int originY = Math.min(world.getMaxHeight() - 2, surface + 1);
+        if (minSurface == Integer.MAX_VALUE) {
+            return;
+        }
+
+        // Clients render an entity only if the chunk section holding its ORIGIN is built, and cull it with a box
+        // that extends from the origin upward. So: origin a little under the lowest surface point, but never
+        // below the section that holds that surface (which is visible, hence built); the model is shifted
+        // down with a translation and the culling box covers everything above the origin.
+        int top = minSurface + 1;
+        int originY = Math.max(top - 3, top & ~15);
+        originY = Math.max(world.getMinHeight(), Math.min(world.getMaxHeight() - 2, originY));
         int minY;
         int height;
         if (cfg.displayHeight() < 0) {
             minY = world.getMinHeight();
             height = world.getMaxHeight() - minY;
         } else {
-            minY = Math.max(world.getMinHeight(), surface - 2);
-            height = cfg.displayHeight();
+            minY = Math.max(world.getMinHeight(), minSurface - 2);
+            height = (maxSurface - minSurface) + cfg.displayHeight();
         }
         float translationY = minY - originY;
         float aboveOrigin = Math.max(2f, minY + height - originY);
 
-        // Every panel sits INSET inside its own chunk. Panels along X run the full (inset) length; panels along Z
-        // are shortened where a north/south panel occupies the corner. Result: no two panels share a face plane,
-        // so translucent faces never z-fight, and facing panels of two different claims stay 2*INSET apart.
-        int bx = edge.chunk().minBlockX();
-        int bz = edge.chunk().minBlockZ();
+        // Every panel sits INSET inside its own chunks. Panels along X run the full (inset) length; panels along Z
+        // yield the corners to them. No two panels share a face plane, so translucent faces never z-fight, and
+        // facing panels of two different claims stay 2*INSET apart.
+        int lineBlock = run.line() << 4;
+        int fromBlock = run.from() << 4;
+        int toBlock = (run.to() + 1) << 4;
         double x;
         double z;
         Vector3f scale;
-        if (edge.alongX()) {
-            x = bx + INSET;
-            z = edge.side() == BoundaryEdge.Side.NORTH ? bz + INSET : bz + 16 - INSET - thickness;
-            scale = new Vector3f(16f - 2 * INSET, height, thickness);
+        if (run.alongX()) {
+            x = fromBlock + INSET;
+            z = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + INSET : lineBlock + 16 - INSET - thickness;
+            scale = new Vector3f(toBlock - fromBlock - 2 * INSET, height, thickness);
         } else {
-            x = edge.side() == BoundaryEdge.Side.WEST ? bx + INSET : bx + 16 - INSET - thickness;
-            float zStart = bz + INSET;
-            float zEnd = bz + 16 - INSET;
-            if (chunkEdges.contains(new BoundaryEdge(edge.chunk(), BoundaryEdge.Side.NORTH))) {
-                zStart += thickness + INSET;
-            }
-            if (chunkEdges.contains(new BoundaryEdge(edge.chunk(), BoundaryEdge.Side.SOUTH))) {
-                zEnd -= thickness + INSET;
-            }
+            x = run.side() == BoundaryEdge.Side.WEST ? lineBlock + INSET : lineBlock + 16 - INSET - thickness;
+            float zStart = fromBlock + INSET + (run.shortenStart() ? thickness + INSET : 0f);
+            float zEnd = toBlock - INSET - (run.shortenEnd() ? thickness + INSET : 0f);
             z = zStart;
             scale = new Vector3f(thickness, height, zEnd - zStart);
         }
@@ -277,10 +396,11 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         display.setBlock(cfg.displayMaterial().createBlockData());
         display.setTransformation(new Transformation(new Vector3f(0f, translationY, 0f), new Quaternionf(), scale, new Quaternionf()));
         display.setBrightness(new Display.Brightness(15, 15));
-        display.setDisplayWidth(32f);
+        // Culling box is centred on the origin horizontally and starts at the origin vertically.
+        display.setDisplayWidth(2f * run.length() * 16f + 4f);
         display.setDisplayHeight(aboveOrigin + 1f);
         // The client draws a display entity only within viewRange * 64 blocks of its origin, measured in 3D.
-        display.setViewRange(Math.max(2f, Math.min(16f, (aboveOrigin + 128f) / 64f)));
+        display.setViewRange(Math.max(2f, Math.min(16f, (aboveOrigin + run.length() * 16f + 128f) / 64f)));
         display.setPersistent(false);
         display.setInvulnerable(true);
         display.setSilent(true);
@@ -289,17 +409,18 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             display.setGlowing(true);
             display.setGlowColorOverride(cfg.displayGlowColor());
         }
-        display.getPersistentDataContainer().set(tag, PersistentDataType.STRING, edge.chunk().serialize() + ";" + edge.side());
-        entities.put(edge, display.getUniqueId());
+        display.getPersistentDataContainer().set(tag, PersistentDataType.STRING,
+                run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
+        entities.put(run, display.getUniqueId());
 
-        Claim claim = plugin.claims().getClaimAt(edge.chunk());
+        Claim claim = plugin.claims().getClaimOf(run.owner());
         for (Player p : Bukkit.getOnlinePlayers()) {
             applyVisibility(p, display.getUniqueId(), claim);
         }
     }
 
-    private void removeEdge(BoundaryEdge edge) {
-        UUID id = entities.remove(edge);
+    private void despawnRun(Run run) {
+        UUID id = entities.remove(run);
         if (id == null) {
             return;
         }
@@ -334,19 +455,25 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         int near = 0;
         Location at = viewer.getLocation();
         double r2 = (double) radius() * radius();
-        for (Map.Entry<BoundaryEdge, UUID> entry : entities.entrySet()) {
-            Entity e = Bukkit.getEntity(entry.getValue());
-            if (e == null) {
-                continue;
+        Set<Run> nearRuns = new HashSet<>();
+        for (Map.Entry<BoundaryEdge, Run> entry : runByEdge.entrySet()) {
+            if (entry.getKey().chunk().world().equals(at.getWorld().getUID())
+                    && entry.getKey().distanceSquared(at.getX(), at.getZ()) <= r2) {
+                nearRuns.add(entry.getValue());
             }
-            alive++;
-            if (e.getWorld().equals(at.getWorld()) && entry.getKey().distanceSquared(at.getX(), at.getZ()) <= r2) {
-                near++;
+        }
+        for (Map.Entry<Run, UUID> entry : entities.entrySet()) {
+            if (Bukkit.getEntity(entry.getValue()) != null) {
+                alive++;
+                if (nearRuns.contains(entry.getKey())) {
+                    near++;
+                }
             }
         }
         Set<UUID> shown = shownNear.get(viewer.getUniqueId());
-        return "panels tracked=" + entities.size() + " alive=" + alive + " within " + radius() + " blocks=" + near
-                + " shown-to-you=" + (shown == null ? 0 : shown.size()) + " reveal=" + plugin.settings().displayReveal();
+        return "panels=" + entities.size() + " alive=" + alive + " edges-covered=" + runByEdge.size()
+                + " within " + radius() + " blocks=" + near + " shown-to-you=" + (shown == null ? 0 : shown.size())
+                + " reveal=" + plugin.settings().displayReveal();
     }
 
     @Override
@@ -358,6 +485,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             }
         }
         entities.clear();
+        runsByOwner.clear();
+        runByEdge.clear();
         shownNear.clear();
         sweepLeftovers();
     }

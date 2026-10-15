@@ -6,7 +6,7 @@ field keeps non-trusted players out.
 
 - One claim per player, any number of chunks (limit in config or per-permission), optional adjacency rule.
 - Three border renderers, switchable in config: **particles**, **ghost blocks** (client-side fake blocks) or
-  **display entities** (world-border style translucent panels).
+  **display entities** (world-border style translucent panels, one per straight run of border).
 - Three force-field behaviours: **HARD** stop, **BOUNCE** (stop + knockback) or **PUSH** (soft repulsion zone).
 - Block / interact / entity / explosion protection, all limited to real player actions. Mod machinery
   (Create contraptions, kinetic networks, deployers, belts...) is never touched.
