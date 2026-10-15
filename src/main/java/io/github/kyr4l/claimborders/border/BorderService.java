@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Drives the active {@link BorderRenderer}: collects the edges near each player every few ticks,
@@ -37,6 +38,11 @@ public final class BorderService implements Listener {
     private final Set<UUID> showing = new HashSet<>();
     private BorderRenderer renderer;
     private BukkitTask task;
+    private final Consumer<ClaimManager.ClaimChange> claimListener = change -> {
+        if (renderer != null) {
+            renderer.onClaimChange(change);
+        }
+    };
 
     public BorderService(ClaimBordersPlugin plugin) {
         this.plugin = plugin;
@@ -47,7 +53,7 @@ public final class BorderService implements Listener {
         renderer = createRenderer(cfg);
         renderer.start();
         Bukkit.getPluginManager().registerEvents(this, plugin);
-        plugin.claims().addListener(change -> renderer.onClaimChange(change));
+        plugin.claims().addListener(claimListener);
         if (renderer.needsTick()) {
             task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, cfg.intervalTicks(), cfg.intervalTicks());
         }
@@ -55,6 +61,7 @@ public final class BorderService implements Listener {
     }
 
     public void shutdown() {
+        plugin.claims().removeListener(claimListener);
         if (task != null) {
             task.cancel();
             task = null;

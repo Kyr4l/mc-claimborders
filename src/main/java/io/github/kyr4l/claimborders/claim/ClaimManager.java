@@ -86,9 +86,18 @@ public final class ClaimManager {
         listeners.add(listener);
     }
 
+    public void removeListener(Consumer<ClaimChange> listener) {
+        listeners.remove(listener);
+    }
+
     private void fire(ClaimChange change) {
-        for (Consumer<ClaimChange> l : listeners) {
-            l.accept(change);
+        // Copy: a listener may unregister itself (renderer restart) while we iterate.
+        for (Consumer<ClaimChange> l : new ArrayList<>(listeners)) {
+            try {
+                l.accept(change);
+            } catch (RuntimeException ex) {
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Claim listener failed for " + change.chunk(), ex);
+            }
         }
     }
 
