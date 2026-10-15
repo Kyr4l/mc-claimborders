@@ -71,6 +71,7 @@ public final class ClaimConfig {
     private final int displayHeight; // -1 = FULL
     private final float displayThickness;
     private final boolean displayGlow;
+    private final boolean displayCullingBox;
     private final Color displayGlowColor;
     private final boolean displayHideFromTrusted;
     private final RevealMode displayReveal;
@@ -136,6 +137,7 @@ public final class ClaimConfig {
         displayHeight = parsedHeight;
         displayThickness = (float) Math.max(0.01, c.getDouble("border.display.thickness", 0.08));
         displayGlow = c.getBoolean("border.display.glow", false);
+        displayCullingBox = c.getBoolean("border.display.culling-box", true);
         displayGlowColor = Text.parseColor(c.getString("border.display.glow-color"), Color.fromRGB(0x4FC3F7));
         displayHideFromTrusted = c.getBoolean("border.display.hide-from-trusted", true);
         displayReveal = parseEnum(RevealMode.class, c.getString("border.display.reveal"), RevealMode.NEAR, log);
@@ -229,6 +231,7 @@ public final class ClaimConfig {
     public int displayHeight() { return displayHeight; }
     public float displayThickness() { return displayThickness; }
     public boolean displayGlow() { return displayGlow; }
+    public boolean displayCullingBox() { return displayCullingBox; }
     public Color displayGlowColor() { return displayGlowColor; }
     public boolean displayHideFromTrusted() { return displayHideFromTrusted; }
     public RevealMode displayReveal() { return displayReveal; }

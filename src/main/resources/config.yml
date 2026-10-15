@@ -77,6 +77,10 @@ border:
     # FULL = from the world's lowest to highest Y. A number = panel height, placed 2 blocks under the surface.
     height: FULL
     thickness: 0.08
+    # true: panels carry a culling box covering the whole wall (correct for vanilla, Sodium/Embeddium and
+    # box-aware culling mods). false: no box, the client never frustum-culls the panel, but mods that cull
+    # by entity position then judge the wall by a single point. Flip it if walls pop in and out of view.
+    culling-box: true
     glow: false
     glow-color: "#4FC3F7"
     hide-from-trusted: true

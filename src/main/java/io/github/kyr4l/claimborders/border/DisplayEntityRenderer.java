@@ -455,10 +455,31 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             lenZ = ze - zs;
         }
 
-        // Origin: inside the panel's footprint, in the middle chunk, one block above the terrain there.
+        // Terrain along the run (loaded chunks only; never force a chunk load from here).
+        int minSurface = Integer.MAX_VALUE;
+        int maxSurface = Integer.MIN_VALUE;
+        for (int c = run.from(); c <= run.to(); c++) {
+            ChunkKey chunk = run.chunkAt(c);
+            if (!chunk.isLoaded()) {
+                continue;
+            }
+            BoundaryEdge edge = new BoundaryEdge(chunk, run.side());
+            for (int i = 0; i < 16; i++) {
+                int y = world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i));
+                minSurface = Math.min(minSurface, y);
+                maxSurface = Math.max(maxSurface, y);
+            }
+        }
+
+        // Origin: inside the panel's footprint, in the middle chunk. Vertically as low as possible so the
+        // culling box (which starts at the origin and extends upward) covers the wall down into valleys, but
+        // never below the chunk section that holds the air above the terrain here, which is the section the
+        // client has built; an origin in an unbuilt section is never drawn.
         double ox = run.alongX() ? originChunk.minBlockX() + 8 : x0 + t / 2;
         double oz = run.alongX() ? z0 + t / 2 : originChunk.minBlockZ() + 8;
-        int originY = Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt((int) Math.floor(ox), (int) Math.floor(oz)) + 1);
+        int airHere = world.getHighestBlockYAt((int) Math.floor(ox), (int) Math.floor(oz)) + 1;
+        int originY = Math.max(minSurface + 1, airHere & ~15);
+        originY = Math.max(world.getMinHeight(), Math.min(world.getMaxHeight() - 2, originY));
 
         // Vertical extent.
         int minY;
@@ -467,31 +488,20 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             minY = world.getMinHeight();
             height = world.getMaxHeight() - minY;
         } else {
-            int minSurface = Integer.MAX_VALUE;
-            int maxSurface = Integer.MIN_VALUE;
-            for (int c = run.from(); c <= run.to(); c++) {
-                ChunkKey chunk = run.chunkAt(c);
-                if (!chunk.isLoaded()) {
-                    continue;   // never force a chunk load from here
-                }
-                BoundaryEdge edge = new BoundaryEdge(chunk, run.side());
-                for (int i = 0; i < 16; i++) {
-                    int y = world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i));
-                    minSurface = Math.min(minSurface, y);
-                    maxSurface = Math.max(maxSurface, y);
-                }
-            }
             minY = Math.max(world.getMinHeight(), minSurface - 2);
             height = Math.min(world.getMaxHeight() - minY, (maxSurface - minSurface) + cfg.displayHeight());
         }
+        // Culling box: centred on the origin horizontally, from the origin up. Covers the whole panel.
+        float cullWidth = 2f * (run.length() * 8f + 12f);
+        float cullHeight = Math.max(1f, minY + height - originY + 1f);
 
         Location loc = new Location(world, ox, originY, oz);
         Claim claim = plugin.claims().getClaimOf(run.owner());
         Material ownMat = cfg.displayMaterial();
         Material foreignMat = cfg.displayForeignMaterial();
-        BlockDisplay own = spawnPanel(world, loc, run, ownMat, x0, z0, lenX, lenZ, minY, height);
+        BlockDisplay own = spawnPanel(world, loc, run, ownMat, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight);
         BlockDisplay foreign = foreignMat == ownMat ? own
-                : spawnPanel(world, loc, run, foreignMat, x0, z0, lenX, lenZ, minY, height);
+                : spawnPanel(world, loc, run, foreignMat, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight);
         for (Player p : Bukkit.getOnlinePlayers()) {
             applyVisibility(p, own, foreign, claim);
         }
@@ -499,7 +509,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     }
 
     private BlockDisplay spawnPanel(World world, Location loc, Run run, Material material,
-                                    double x0, double z0, double lenX, double lenZ, int minY, int height) {
+                                    double x0, double z0, double lenX, double lenZ, int minY, int height,
+                                    float cullWidth, float cullHeight) {
         // A glass pane's centre post is 2/16 wide and uses only the uniform middle strip of the texture, so a
         // scaled pane is a flat tint with no stretched frame. Map the post [7/16, 9/16] onto the panel box.
         boolean pane = material.createBlockData() instanceof GlassPane;
@@ -517,8 +528,14 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             d.setBlock(material.createBlockData());
             d.setTransformation(new Transformation(translation, new Quaternionf(), scale, new Quaternionf()));
             d.setBrightness(new Display.Brightness(15, 15));
-            // No culling width/height on purpose: that leaves the client's noCulling flag set, so the panel is
-            // never frustum-culled by its (origin-anchored) box. View range maxed: 16 * 64 blocks from the origin.
+            // With a culling box the client frustum-tests the whole panel (vanilla, Sodium and box-aware culling
+            // mods all pass it). Without one the client's noCulling flag stays set and the panel is never
+            // frustum-culled, but position-based culling mods then test a single point. Configurable for testing.
+            if (cfg.displayCullingBox()) {
+                d.setDisplayWidth(cullWidth);
+                d.setDisplayHeight(cullHeight);
+            }
+            // View range maxed: 16 * 64 blocks from the origin.
             d.setViewRange(16f);
             d.setPersistent(false);
             d.setInvulnerable(true);
