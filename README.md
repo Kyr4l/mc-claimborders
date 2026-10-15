@@ -49,9 +49,9 @@ See [docs/variants.md](docs/variants.md) for the comparison of the border and fo
 
 ```yaml
 claims.max-chunks: 16          # default limit
-border.renderer: PARTICLES     # PARTICLES | GHOST_BLOCKS | DISPLAY | NONE
-forcefield.mode: BOUNCE        # HARD | BOUNCE | PUSH
-border.display.reveal: ALWAYS  # ALWAYS | NEAR  (DISPLAY renderer only)
+border.renderer: DISPLAY       # PARTICLES | GHOST_BLOCKS | DISPLAY | NONE
+forcefield.mode: PUSH          # HARD | BOUNCE | PUSH
+border.display.reveal: NEAR    # ALWAYS | NEAR  (DISPLAY renderer only)
 protection.ignore-fake-players: true   # keep on with Create
 ```
 
@@ -63,13 +63,17 @@ Requires a JDK (17 or newer) and Maven. On openSUSE:
 
 ```sh
 sudo zypper install java-21-openjdk-devel maven
-mvn -q package
+JAVA_HOME=/usr/lib64/jvm/java-21-openjdk-21 mvn -q package
 ```
 
-The jar lands in `target/ClaimBorders-<version>.jar`. It compiles against Spigot API 1.20.1 with Java 17
-bytecode and runs on 1.18.2 and newer; the `DISPLAY` renderer needs 1.19.4 or newer and falls back to
-particles on older servers. Particle and material names are resolved at runtime, so the same jar works
-across the 1.20.5 renames.
+Maven must run on a full JDK. If the default `java` is a plain runtime (such as the Java 25 JRE on
+openSUSE), it has no `--release` data and the build fails with "release version 21 not supported"; the
+`JAVA_HOME` above points Maven at the JDK. To make that permanent: `sudo update-alternatives --config java`.
+
+The jar lands in `target/ClaimBorders-<version>.jar`. It compiles against Spigot API 1.21.1 with Java 21
+bytecode, matching Youer/Mohist/Arclight 1.21.1 (any 1.20.5+ server on Java 21 should work). To target an
+older server, lower `spigot.api.version` and `maven.compiler.release` in `pom.xml` and `api-version` in
+`plugin.yml`; particle and material names are resolved at runtime, so the code itself compiles on 1.20.1 too.
 
 ## Testing with PlugManX
 

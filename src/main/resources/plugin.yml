@@ -1,7 +1,7 @@
 name: ClaimBorders
 version: '${project.version}'
 main: io.github.kyr4l.claimborders.ClaimBordersPlugin
-api-version: '1.19'
+api-version: '1.21'
 author: Kyr4l
 description: Claim chunks one by one and protect them behind a visible force field.
 

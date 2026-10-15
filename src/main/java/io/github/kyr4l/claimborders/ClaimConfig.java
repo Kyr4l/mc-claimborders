@@ -94,7 +94,7 @@ public final class ClaimConfig {
         ignoreFakePlayers = c.getBoolean("protection.ignore-fake-players", true);
 
         forceFieldEnabled = c.getBoolean("forcefield.enabled", true);
-        forceFieldMode = parseEnum(ForceFieldMode.class, c.getString("forcefield.mode"), ForceFieldMode.BOUNCE, log);
+        forceFieldMode = parseEnum(ForceFieldMode.class, c.getString("forcefield.mode"), ForceFieldMode.PUSH, log);
         knockback = c.getDouble("forcefield.knockback", 0.6);
         pushRadius = Math.max(0.5, c.getDouble("forcefield.push-radius", 3.0));
         pushStrength = c.getDouble("forcefield.push-strength", 0.35);
@@ -102,7 +102,7 @@ public final class ClaimConfig {
         blockVehicles = c.getBoolean("forcefield.block-vehicles", true);
         messageCooldownMillis = (int) (c.getDouble("forcefield.message-cooldown-seconds", 2.0) * 1000);
 
-        renderer = parseEnum(RendererType.class, c.getString("border.renderer"), RendererType.PARTICLES, log);
+        renderer = parseEnum(RendererType.class, c.getString("border.renderer"), RendererType.DISPLAY, log);
         showOwnByDefault = c.getBoolean("border.show-own-by-default", false);
         borderRadius = Math.max(8, c.getInt("border.radius", 48));
         intervalTicks = Math.max(1, c.getInt("border.interval-ticks", 10));
@@ -136,7 +136,7 @@ public final class ClaimConfig {
         displayGlow = c.getBoolean("border.display.glow", false);
         displayGlowColor = Text.parseColor(c.getString("border.display.glow-color"), Color.fromRGB(0x4FC3F7));
         displayHideFromTrusted = c.getBoolean("border.display.hide-from-trusted", true);
-        displayReveal = parseEnum(RevealMode.class, c.getString("border.display.reveal"), RevealMode.ALWAYS, log);
+        displayReveal = parseEnum(RevealMode.class, c.getString("border.display.reveal"), RevealMode.NEAR, log);
         displayRevealRadius = Math.max(4, c.getInt("border.display.reveal-radius", 24));
 
         prefix = c.getString("messages.prefix", "&b[Claims]&r ");

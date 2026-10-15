@@ -13,11 +13,11 @@
   <description>Chunk claiming with a visible force-field border for Bukkit/Spigot-compatible servers.</description>
 
   <properties>
-    <!-- Java 17 bytecode: runs on 1.18.2+ servers (Java 17) and 1.20.5+/1.21 servers (Java 21). -->
-    <maven.compiler.release>17</maven.compiler.release>
+    <!-- Java 21 bytecode: Minecraft 1.20.5+ servers run on Java 21 (target: Youer 1.21.1). -->
+    <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- Oldest API we compile against. The jar still runs on newer servers. -->
-    <spigot.api.version>1.20.1-R0.1-SNAPSHOT</spigot.api.version>
+    <!-- API we compile against. Spigot API is the common denominator of Youer/Mohist/Arclight/Paper. -->
+    <spigot.api.version>1.21.1-R0.1-SNAPSHOT</spigot.api.version>
   </properties>
 
   <repositories>

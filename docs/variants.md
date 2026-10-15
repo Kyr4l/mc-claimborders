@@ -14,7 +14,7 @@ All variants ship in the plugin and are selected in `config.yml`. `/claim admin 
 | Cleanup | None needed | Fake blocks restored on leave/quit/unload | Entities tagged + non-persistent, removed on unload, swept on enable |
 | Caveats | Easy to miss at night; particle setting "minimal" hides it | Mod contraptions or real block updates briefly overwrite the fake blocks | Very tall panels; use `height: <n>` for a surface-level band instead of `FULL` |
 
-Recommended start: `DISPLAY` with `reveal: NEAR` for a force-field look that only appears when
+Default: `DISPLAY` with `reveal: NEAR` for a force-field look that only appears when
 somebody approaches; `PARTICLES` as the fallback.
 
 ## Force field (`forcefield.mode`)
@@ -23,7 +23,7 @@ somebody approaches; `PARTICLES` as the fallback.
 | --- | --- | --- | --- |
 | On crossing into a foreign chunk | Move rewritten back to last allowed position | Same, plus horizontal knockback away from the chunk (`knockback`) | Same as HARD at the line |
 | Before the line | Nothing | Nothing | Repulsion grows from `push-radius` blocks out to full `push-strength` at the line |
-| Feel | Invisible wall | Shield | Magnetic field |
+| Feel | Invisible wall | Shield | Magnetic field (default) |
 
 Common to all modes: teleports into a claim are cancelled (`block-teleports`), vanilla vehicles drop
 outsiders at the line (`block-vehicles`), claiming a chunk ejects intruders (`eject-on-claim`), logging in

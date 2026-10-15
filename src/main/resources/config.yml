@@ -31,7 +31,7 @@ forcefield:
   # HARD   : the border is a wall, movement into the claim is simply stopped.
   # BOUNCE : stopped and knocked back (like hitting a shield).
   # PUSH   : a soft repulsion zone starts push-radius blocks before the border, and the line itself still stops you.
-  mode: BOUNCE
+  mode: PUSH
   knockback: 0.6          # BOUNCE horizontal strength
   push-radius: 3.0        # PUSH: how far from the border the repulsion starts
   push-strength: 0.35     # PUSH: strength at the border, fades out towards push-radius
@@ -44,7 +44,7 @@ border:
   # GHOST_BLOCKS : per-player fake blocks. Outsiders see a glass wall around their height, members see a ground outline.
   # DISPLAY : real (non-persistent) BlockDisplay panels per boundary edge: a translucent wall from bedrock to sky, visible to everyone. Needs 1.19.4+.
   # NONE : no visual border (the force field still works).
-  renderer: PARTICLES
+  renderer: DISPLAY
   # Members see their own borders without typing /claim show.
   show-own-by-default: false
   # Blocks around a player in which borders are drawn (PARTICLES / GHOST_BLOCKS).
@@ -78,7 +78,7 @@ border:
     hide-from-trusted: true
     # ALWAYS : panels are visible to anyone (except trusted members when hide-from-trusted is on).
     # NEAR   : panels are invisible until a player comes within reveal-radius blocks.
-    reveal: ALWAYS
+    reveal: NEAR
     reveal-radius: 24
 
 messages:
