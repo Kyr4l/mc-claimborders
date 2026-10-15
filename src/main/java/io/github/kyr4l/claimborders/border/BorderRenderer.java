@@ -46,6 +46,11 @@ public interface BorderRenderer {
     default void onChunkUnload(Chunk chunk) {
     }
 
+    /** One line of diagnostics for /claim admin stats. */
+    default String debug(Player viewer) {
+        return "";
+    }
+
     /** Remove everything, for every viewer, from every world. */
     void shutdown();
 }

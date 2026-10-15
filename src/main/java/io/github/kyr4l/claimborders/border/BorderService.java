@@ -121,6 +121,18 @@ public final class BorderService implements Listener {
         return now;
     }
 
+    /** Diagnostics for /claim admin stats. */
+    public String debug(Player player) {
+        if (renderer == null) {
+            return "renderer not running";
+        }
+        int radius = renderer.radius();
+        List<EdgeView> edges = collectEdges(player, radius);
+        long own = edges.stream().filter(EdgeView::trusted).count();
+        return renderer.getClass().getSimpleName() + ": showing=" + isShowing(player) + ", edges within " + radius
+                + " blocks=" + edges.size() + " (own " + own + "), " + renderer.debug(player);
+    }
+
     // ---- tick ------------------------------------------------------------
 
     private void tick() {

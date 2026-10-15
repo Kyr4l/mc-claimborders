@@ -244,8 +244,13 @@ public final class ClaimCommand implements TabExecutor {
                 plugin.reload();
                 sender.sendMessage(Text.color("&aClaimBorders reloaded."));
             }
-            case "stats" -> sender.sendMessage(Text.color("&b" + claims().totalChunks() + " chunk(s) claimed by "
-                    + claims().getClaims().size() + " player(s). Renderer: " + cfg().renderer() + ", force field: " + cfg().forceFieldMode()));
+            case "stats" -> {
+                sender.sendMessage(Text.color("&b" + claims().totalChunks() + " chunk(s) claimed by "
+                        + claims().getClaims().size() + " player(s). Renderer: " + cfg().renderer() + ", force field: " + cfg().forceFieldMode()));
+                if (sender instanceof Player p) {
+                    sender.sendMessage(Text.color("&7" + plugin.borders().debug(p)));
+                }
+            }
             case "unclaim" -> {
                 if (!(sender instanceof Player p)) {
                     sender.sendMessage("Players only.");

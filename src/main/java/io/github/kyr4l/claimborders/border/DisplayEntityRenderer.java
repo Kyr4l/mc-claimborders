@@ -247,7 +247,9 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         display.setBrightness(new Display.Brightness(15, 15));
         display.setDisplayWidth(32f);
         display.setDisplayHeight(height + 2f);
-        display.setViewRange(1.5f);
+        // The client draws a display entity only within viewRange * 64 blocks of its ORIGIN, measured in 3D.
+        // A full-height panel starts at bedrock, so the range must cover the whole column plus some margin.
+        display.setViewRange(Math.max(1.5f, Math.min(16f, (height + 160f) / 64f)));
         display.setPersistent(false);
         display.setInvulnerable(true);
         display.setSilent(true);
@@ -293,6 +295,27 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         if (removed > 0) {
             plugin.getLogger().info("Removed " + removed + " leftover border panel(s).");
         }
+    }
+
+    @Override
+    public String debug(Player viewer) {
+        int alive = 0;
+        int near = 0;
+        Location at = viewer.getLocation();
+        double r2 = (double) radius() * radius();
+        for (Map.Entry<BoundaryEdge, UUID> entry : entities.entrySet()) {
+            Entity e = Bukkit.getEntity(entry.getValue());
+            if (e == null) {
+                continue;
+            }
+            alive++;
+            if (e.getWorld().equals(at.getWorld()) && entry.getKey().distanceSquared(at.getX(), at.getZ()) <= r2) {
+                near++;
+            }
+        }
+        Set<UUID> shown = shownNear.get(viewer.getUniqueId());
+        return "panels tracked=" + entities.size() + " alive=" + alive + " within " + radius() + " blocks=" + near
+                + " shown-to-you=" + (shown == null ? 0 : shown.size()) + " reveal=" + plugin.settings().displayReveal();
     }
 
     @Override
