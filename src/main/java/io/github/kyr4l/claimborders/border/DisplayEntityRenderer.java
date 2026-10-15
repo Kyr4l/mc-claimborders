@@ -9,8 +9,10 @@ import io.github.kyr4l.claimborders.claim.ClaimManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.block.data.type.GlassPane;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
@@ -32,15 +34,26 @@ import java.util.TreeSet;
 import java.util.UUID;
 
 /**
- * Translucent BlockDisplay panels along claim borders: a "force field" wall everyone sees, with no
- * per-player packet work. Every straight run of boundary (up to {@link #MAX_RUN} chunks) is one panel,
- * so walls have no seams; gaps exist only at corners where they are hidden by the perpendicular panel.
- * Entities are non-persistent and tagged, so a crash or a PlugManX unload never leaves garbage behind.
- * Needs Minecraft 1.19.4 or newer.
+ * Translucent BlockDisplay panels along claim borders: a "force field" wall with no per-player packet
+ * work beyond show/hide. Every straight run of boundary (up to {@link #MAX_RUN} chunks) is one panel in
+ * the member colour plus one in the outsider colour at the same place; each player is shown only the one
+ * that applies to them. Entities are non-persistent and tagged, so a crash or a PlugManX unload never
+ * leaves garbage behind. Needs Minecraft 1.19.4 or newer.
+ *
+ * <p>Client rendering rules this code is built around:
+ * <ul>
+ *   <li>A display entity with no culling width/height is never frustum-culled (vanilla and Sodium both
+ *       honour that flag), so the panel can be any size without blinking at the edges of the view.</li>
+ *   <li>It is still only drawn if the chunk section holding the entity's position is built, so the origin
+ *       sits at terrain level in the middle chunk of the run, never underground.</li>
+ *   <li>It is only drawn within viewRange * 64 blocks of that origin, so the view range is maxed out.</li>
+ *   <li>The server only sends it to players within the entity tracking range of the origin; with the origin
+ *       in the middle of a run of at most MAX_RUN chunks, no point of the panel is far from it.</li>
+ * </ul>
  */
 public final class DisplayEntityRenderer implements BorderRenderer {
 
-    /** Longest panel, in chunks. The panel lives in its first chunk, which must be loaded for it to exist. */
+    /** Longest panel, in chunks. The panel lives in its middle chunk, which must be loaded for it to exist. */
     private static final int MAX_RUN = 8;
 
     /** Gap between a panel and the chunk line, and between panels. Keeps faces off each other's planes. */
@@ -50,7 +63,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     private enum End { CONVEX, INNER, SPLIT }
 
     /**
-     * One straight panel. {@code line} is the chunk row (north/south) or column (west/east) it runs along;
+     * One straight wall. {@code line} is the chunk row (north/south) or column (west/east) it runs along;
      * {@code from..to} are the chunk coordinates along it. The end kinds decide how far the panel reaches
      * at each end so corners close without any two faces sharing a plane.
      */
@@ -64,19 +77,27 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             return alongX() ? new ChunkKey(world, coord, line) : new ChunkKey(world, line, coord);
         }
 
-        ChunkKey originChunk() {
-            return chunkAt(from);
-        }
-
         int length() {
             return to - from + 1;
+        }
+
+        /** The chunk the entities live in: the middle of the run. */
+        ChunkKey originChunk() {
+            return chunkAt(from + length() / 2);
+        }
+    }
+
+    /** The entities of one run: the member-coloured panel and the outsider-coloured one. */
+    private record Panels(UUID own, UUID foreign) {
+        List<UUID> all() {
+            return own.equals(foreign) ? List.of(own) : List.of(own, foreign);
         }
     }
 
     private final ClaimBordersPlugin plugin;
     private final BorderService service;
     private final NamespacedKey tag;
-    private final Map<Run, UUID> entities = new HashMap<>();
+    private final Map<Run, Panels> entities = new HashMap<>();
     private final Map<UUID, Set<Run>> runsByOwner = new HashMap<>();
     private final Map<BoundaryEdge, Run> runByEdge = new HashMap<>();
     private final Map<UUID, Set<UUID>> shownNear = new HashMap<>();
@@ -101,12 +122,25 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     private void heal() {
         for (Set<Run> runs : runsByOwner.values()) {
             for (Run run : runs) {
-                UUID id = entities.get(run);
-                if ((id == null || Bukkit.getEntity(id) == null) && run.originChunk().isLoaded()) {
+                if (!alive(run) && run.originChunk().isLoaded()) {
+                    despawnRun(run);
                     spawnRun(run);
                 }
             }
         }
+    }
+
+    private boolean alive(Run run) {
+        Panels panels = entities.get(run);
+        if (panels == null) {
+            return false;
+        }
+        for (UUID id : panels.all()) {
+            if (Bukkit.getEntity(id) == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -131,9 +165,9 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         Set<UUID> wanted = new HashSet<>();
         for (EdgeView view : edges) {
             Run run = runByEdge.get(view.edge());
-            UUID id = run == null ? null : entities.get(run);
-            if (id != null) {
-                wanted.add(id);
+            Panels panels = run == null ? null : entities.get(run);
+            if (panels != null) {
+                wanted.add(view.trusted() ? panels.own() : panels.foreign());
             }
         }
         Set<UUID> shown = shownNear.computeIfAbsent(viewer.getUniqueId(), k -> new HashSet<>());
@@ -170,14 +204,14 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
     }
 
-    // ---- ALWAYS reveal: hide only from trusted members -----------------------
+    // ---- ALWAYS reveal: members see their colour, outsiders theirs ------------
 
     @Override
     public void onShowToggle(Player viewer, boolean showing) {
         if (plugin.settings().displayReveal() != ClaimConfig.RevealMode.ALWAYS) {
             return;
         }
-        for (Map.Entry<Run, UUID> entry : entities.entrySet()) {
+        for (Map.Entry<Run, Panels> entry : entities.entrySet()) {
             Claim claim = plugin.claims().getClaimOf(entry.getKey().owner());
             if (claim != null && claim.isTrusted(viewer)) {
                 applyVisibility(viewer, entry.getValue(), claim);
@@ -187,26 +221,41 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     @Override
     public void onJoin(Player player) {
-        for (Map.Entry<Run, UUID> entry : entities.entrySet()) {
+        for (Map.Entry<Run, Panels> entry : entities.entrySet()) {
             applyVisibility(player, entry.getValue(), plugin.claims().getClaimOf(entry.getKey().owner()));
         }
     }
 
-    private void applyVisibility(Player player, UUID entityId, Claim claim) {
-        Entity e = Bukkit.getEntity(entityId);
-        if (e != null) {
-            applyVisibility(player, e, claim);
+    private void applyVisibility(Player player, Panels panels, Claim claim) {
+        Entity own = Bukkit.getEntity(panels.own());
+        Entity foreign = Bukkit.getEntity(panels.foreign());
+        if (own == null || foreign == null) {
+            return;
+        }
+        applyVisibility(player, own, foreign, claim);
+    }
+
+    /** Decides which of the two panels (if any) this player sees. In NEAR mode both start hidden. */
+    private void applyVisibility(Player player, Entity own, Entity foreign, Claim claim) {
+        boolean showOwn = false;
+        boolean showForeign = false;
+        if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.ALWAYS) {
+            boolean trusted = claim != null && claim.isTrusted(player);
+            if (trusted) {
+                showOwn = !plugin.settings().displayHideFromTrusted() || service.isShowing(player);
+            } else {
+                showForeign = true;
+            }
+        }
+        if (own == foreign) {
+            toggle(player, own, showOwn || showForeign);
+        } else {
+            toggle(player, own, showOwn);
+            toggle(player, foreign, showForeign);
         }
     }
 
-    private void applyVisibility(Player player, Entity e, Claim claim) {
-        boolean visible;
-        if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.NEAR) {
-            visible = false; // revealed by render() when close
-        } else {
-            boolean trusted = claim != null && claim.isTrusted(player);
-            visible = !(trusted && plugin.settings().displayHideFromTrusted() && !service.isShowing(player));
-        }
+    private void toggle(Player player, Entity e, boolean visible) {
         if (visible) {
             player.showEntity(plugin, e);
         } else {
@@ -241,8 +290,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         // Spawn a tick later: during ChunkLoadEvent the chunk's entity storage may not be ready yet.
         Bukkit.getScheduler().runTask(plugin, () -> {
             for (Run run : runsByOwner.getOrDefault(claim.getOwner(), Set.of())) {
-                UUID id = entities.get(run);
-                if (run.originChunk().equals(key) && (id == null || Bukkit.getEntity(id) == null)) {
+                if (run.originChunk().equals(key) && !alive(run)) {
+                    despawnRun(run);
                     spawnRun(run);
                 }
             }
@@ -364,55 +413,17 @@ public final class DisplayEntityRenderer implements BorderRenderer {
 
     private void spawnRun(Run run) {
         World world = Bukkit.getWorld(run.world());
-        if (world == null || !run.originChunk().isLoaded()) {
+        ChunkKey originChunk = run.originChunk();
+        if (world == null || !originChunk.isLoaded()) {
             return;
         }
         ClaimConfig cfg = plugin.settings();
-        float thickness = cfg.displayThickness();
-
-        // Terrain along the run, sampled only in loaded chunks (never force a chunk load from here).
-        int minSurface = Integer.MAX_VALUE;
-        int maxSurface = Integer.MIN_VALUE;
-        for (int c = run.from(); c <= run.to(); c++) {
-            ChunkKey chunk = run.chunkAt(c);
-            if (!chunk.isLoaded()) {
-                continue;
-            }
-            BoundaryEdge edge = new BoundaryEdge(chunk, run.side());
-            for (int i = 0; i < 16; i++) {
-                int y = world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i));
-                minSurface = Math.min(minSurface, y);
-                maxSurface = Math.max(maxSurface, y);
-            }
-        }
-        if (minSurface == Integer.MAX_VALUE) {
-            return;
-        }
-
-        // Clients render an entity only if the chunk section holding its ORIGIN is built, and cull it with a box
-        // that extends from the origin upward. So: origin a little under the lowest surface point, but never
-        // below the section that holds that surface (which is visible, hence built); the model is shifted
-        // down with a translation and the culling box covers everything above the origin.
-        int top = minSurface + 1;
-        int originY = Math.max(top - 3, top & ~15);
-        originY = Math.max(world.getMinHeight(), Math.min(world.getMaxHeight() - 2, originY));
-        int minY;
-        int height;
-        if (cfg.displayHeight() < 0) {
-            minY = world.getMinHeight();
-            height = world.getMaxHeight() - minY;
-        } else {
-            minY = Math.max(world.getMinHeight(), minSurface - 2);
-            height = (maxSurface - minSurface) + cfg.displayHeight();
-        }
-        float translationY = minY - originY;
-        float aboveOrigin = Math.max(2f, minY + height - originY);
+        float t = cfg.displayThickness();
 
         // Geometry. Faces must never share a plane (translucent z-fighting), and corners must be sealed.
         // North/south panels sit INSET inside the chunk line, west/east panels 2*INSET: they cross each other at
         // corners with every face at least INSET apart. At an outer corner the north/south panel stops INSET
         // short and the west/east one runs through it; at an inner corner both run through each other.
-        float t = thickness;
         int lineBlock = run.line() << 4;
         int fromBlock = run.from() << 4;
         int toBlock = (run.to() + 1) << 4;
@@ -443,36 +454,72 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             z0 = zs;
             lenZ = ze - zs;
         }
-        double x = x0;
-        double z = z0;
 
-        // A glass pane's centre post is 2/16 wide and uses only the uniform middle strip of the texture, so a
-        // scaled pane is a flat tint with no stretched frame. Map the post [7/16, 9/16] onto the panel box.
-        boolean pane = cfg.displayMaterial().createBlockData() instanceof org.bukkit.block.data.type.GlassPane;
-        Vector3f scale;
-        Vector3f translation;
-        if (pane) {
-            scale = new Vector3f((float) (lenX * 8), height, (float) (lenZ * 8));
-            translation = new Vector3f((float) (-3.5 * lenX), translationY, (float) (-3.5 * lenZ));
+        // Origin: inside the panel's footprint, in the middle chunk, one block above the terrain there.
+        double ox = run.alongX() ? originChunk.minBlockX() + 8 : x0 + t / 2;
+        double oz = run.alongX() ? z0 + t / 2 : originChunk.minBlockZ() + 8;
+        int originY = Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt((int) Math.floor(ox), (int) Math.floor(oz)) + 1);
+
+        // Vertical extent.
+        int minY;
+        int height;
+        if (cfg.displayHeight() < 0) {
+            minY = world.getMinHeight();
+            height = world.getMaxHeight() - minY;
         } else {
-            scale = new Vector3f((float) lenX, height, (float) lenZ);
-            translation = new Vector3f(0f, translationY, 0f);
+            int minSurface = Integer.MAX_VALUE;
+            int maxSurface = Integer.MIN_VALUE;
+            for (int c = run.from(); c <= run.to(); c++) {
+                ChunkKey chunk = run.chunkAt(c);
+                if (!chunk.isLoaded()) {
+                    continue;   // never force a chunk load from here
+                }
+                BoundaryEdge edge = new BoundaryEdge(chunk, run.side());
+                for (int i = 0; i < 16; i++) {
+                    int y = world.getHighestBlockYAt(edge.innerBlockX(i), edge.innerBlockZ(i));
+                    minSurface = Math.min(minSurface, y);
+                    maxSurface = Math.max(maxSurface, y);
+                }
+            }
+            minY = Math.max(world.getMinHeight(), minSurface - 2);
+            height = Math.min(world.getMaxHeight() - minY, (maxSurface - minSurface) + cfg.displayHeight());
         }
 
-        Location loc = new Location(world, x, originY, z);
+        Location loc = new Location(world, ox, originY, oz);
         Claim claim = plugin.claims().getClaimOf(run.owner());
-        final float fAboveOrigin = aboveOrigin;
+        Material ownMat = cfg.displayMaterial();
+        Material foreignMat = cfg.displayForeignMaterial();
+        BlockDisplay own = spawnPanel(world, loc, run, ownMat, x0, z0, lenX, lenZ, minY, height);
+        BlockDisplay foreign = foreignMat == ownMat ? own
+                : spawnPanel(world, loc, run, foreignMat, x0, z0, lenX, lenZ, minY, height);
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            applyVisibility(p, own, foreign, claim);
+        }
+        entities.put(run, new Panels(own.getUniqueId(), foreign.getUniqueId()));
+    }
+
+    private BlockDisplay spawnPanel(World world, Location loc, Run run, Material material,
+                                    double x0, double z0, double lenX, double lenZ, int minY, int height) {
+        // A glass pane's centre post is 2/16 wide and uses only the uniform middle strip of the texture, so a
+        // scaled pane is a flat tint with no stretched frame. Map the post [7/16, 9/16] onto the panel box.
+        boolean pane = material.createBlockData() instanceof GlassPane;
+        Vector3f scale = pane
+                ? new Vector3f((float) (lenX * 8), height, (float) (lenZ * 8))
+                : new Vector3f((float) lenX, height, (float) lenZ);
+        Vector3f translation = new Vector3f(
+                (float) (x0 - loc.getX() - (pane ? 3.5 * lenX : 0)),
+                (float) (minY - loc.getY()),
+                (float) (z0 - loc.getZ() - (pane ? 3.5 * lenZ : 0)));
+        ClaimConfig cfg = plugin.settings();
         // Configure before the entity is added to the world: one spawn packet with the final state, and the
-        // per-player hide decisions are already in place, so nobody sees a one-tick flash.
-        BlockDisplay display = world.spawn(loc, BlockDisplay.class, (java.util.function.Consumer<BlockDisplay>) d -> {
-            d.setBlock(cfg.displayMaterial().createBlockData());
+        // per-player hide decisions are applied right after, before the next tick sends anything.
+        return world.spawn(loc, BlockDisplay.class, (java.util.function.Consumer<BlockDisplay>) d -> {
+            d.setBlock(material.createBlockData());
             d.setTransformation(new Transformation(translation, new Quaternionf(), scale, new Quaternionf()));
             d.setBrightness(new Display.Brightness(15, 15));
-            // Culling box is centred on the origin horizontally and starts at the origin vertically.
-            d.setDisplayWidth(2f * run.length() * 16f + 4f);
-            d.setDisplayHeight(fAboveOrigin + 1f);
-            // The client draws a display entity only within viewRange * 64 blocks of its origin, measured in 3D.
-            d.setViewRange(Math.max(2f, Math.min(16f, (fAboveOrigin + run.length() * 16f + 128f) / 64f)));
+            // No culling width/height on purpose: that leaves the client's noCulling flag set, so the panel is
+            // never frustum-culled by its (origin-anchored) box. View range maxed: 16 * 64 blocks from the origin.
+            d.setViewRange(16f);
             d.setPersistent(false);
             d.setInvulnerable(true);
             d.setSilent(true);
@@ -483,24 +530,26 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             }
             d.getPersistentDataContainer().set(tag, PersistentDataType.STRING,
                     run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
+            // Hidden from everyone until applyVisibility decides; avoids a flash for players who should not see it.
             for (Player p : Bukkit.getOnlinePlayers()) {
-                applyVisibility(p, d, claim);
+                p.hideEntity(plugin, d);
             }
         });
-        entities.put(run, display.getUniqueId());
     }
 
     private void despawnRun(Run run) {
-        UUID id = entities.remove(run);
-        if (id == null) {
+        Panels panels = entities.remove(run);
+        if (panels == null) {
             return;
         }
-        Entity e = Bukkit.getEntity(id);
-        if (e != null) {
-            e.remove();
-        }
-        for (Set<UUID> shown : shownNear.values()) {
-            shown.remove(id);
+        for (UUID id : panels.all()) {
+            Entity e = Bukkit.getEntity(id);
+            if (e != null) {
+                e.remove();
+            }
+            for (Set<UUID> shown : shownNear.values()) {
+                shown.remove(id);
+            }
         }
     }
 
@@ -533,16 +582,16 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                 nearRuns.add(entry.getValue());
             }
         }
-        for (Map.Entry<Run, UUID> entry : entities.entrySet()) {
-            if (Bukkit.getEntity(entry.getValue()) != null) {
+        for (Run run : entities.keySet()) {
+            if (alive(run)) {
                 alive++;
-                if (nearRuns.contains(entry.getKey())) {
+                if (nearRuns.contains(run)) {
                     near++;
                 }
             }
         }
         Set<UUID> shown = shownNear.get(viewer.getUniqueId());
-        return "panels=" + entities.size() + " alive=" + alive + " edges-covered=" + runByEdge.size()
+        return "runs=" + entities.size() + " alive=" + alive + " edges-covered=" + runByEdge.size()
                 + " within " + radius() + " blocks=" + near + " shown-to-you=" + (shown == null ? 0 : shown.size())
                 + " reveal=" + plugin.settings().displayReveal();
     }
@@ -553,11 +602,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             healTask.cancel();
             healTask = null;
         }
-        for (UUID id : entities.values()) {
-            Entity e = Bukkit.getEntity(id);
-            if (e != null) {
-                e.remove();
-            }
+        for (Run run : new ArrayList<>(entities.keySet())) {
+            despawnRun(run);
         }
         entities.clear();
         runsByOwner.clear();

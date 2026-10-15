@@ -67,6 +67,7 @@ public final class ClaimConfig {
     private final int ghostRadius;
 
     private final Material displayMaterial;
+    private final Material displayForeignMaterial;
     private final int displayHeight; // -1 = FULL
     private final float displayThickness;
     private final boolean displayGlow;
@@ -123,6 +124,7 @@ public final class ClaimConfig {
         ghostRadius = Math.max(8, c.getInt("border.ghost-blocks.radius", 32));
 
         displayMaterial = parseMaterial(c.getString("border.display.material"), Material.LIGHT_BLUE_STAINED_GLASS_PANE, log);
+        displayForeignMaterial = parseMaterial(c.getString("border.display.foreign-material"), Material.RED_STAINED_GLASS_PANE, log);
         String h = String.valueOf(c.get("border.display.height", "FULL")).trim();
         int parsedHeight;
         try {
@@ -223,6 +225,7 @@ public final class ClaimConfig {
     public int ghostRadius() { return ghostRadius; }
 
     public Material displayMaterial() { return displayMaterial; }
+    public Material displayForeignMaterial() { return displayForeignMaterial; }
     public int displayHeight() { return displayHeight; }
     public float displayThickness() { return displayThickness; }
     public boolean displayGlow() { return displayGlow; }

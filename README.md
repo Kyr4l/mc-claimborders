@@ -52,6 +52,8 @@ claims.max-chunks: 16          # default limit
 border.renderer: DISPLAY       # PARTICLES | GHOST_BLOCKS | DISPLAY | NONE
 forcefield.mode: PUSH          # HARD | BOUNCE | PUSH
 border.display.reveal: NEAR    # ALWAYS | NEAR  (DISPLAY renderer only)
+border.display.material: LIGHT_BLUE_STAINED_GLASS_PANE   # what members see
+border.display.foreign-material: RED_STAINED_GLASS_PANE  # what outsiders see
 protection.ignore-fake-players: true   # keep on with Create
 ```
 
