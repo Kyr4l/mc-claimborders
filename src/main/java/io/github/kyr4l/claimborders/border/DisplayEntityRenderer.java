@@ -65,9 +65,12 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     /**
      * One straight wall. {@code line} is the chunk row (north/south) or column (west/east) it runs along;
      * {@code from..to} are the chunk coordinates along it. The end kinds decide how far the panel reaches
-     * at each end so corners close without any two faces sharing a plane.
+     * at each end so corners close without any two faces sharing a plane. {@code shifted} alternates along
+     * runs cut by MAX_RUN: a shifted run sits 2*INSET further inside the chunk and overlaps its neighbours
+     * by 2*INSET, which closes the seam without any coplanar faces.
      */
-    private record Run(UUID owner, UUID world, BoundaryEdge.Side side, int line, int from, int to, End start, End end) {
+    private record Run(UUID owner, UUID world, BoundaryEdge.Side side, int line, int from, int to, End start, End end,
+                       boolean shifted) {
 
         boolean alongX() {
             return side == BoundaryEdge.Side.NORTH || side == BoundaryEdge.Side.SOUTH;
@@ -88,9 +91,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     }
 
     /**
-     * The entities of one run: member-coloured panels and outsider-coloured ones (the main panel plus, at a
-     * MAX_RUN split, a sliver that sits behind the seam). When both colours are the same material the lists
-     * hold the same entities.
+     * The entities of one run: the member-coloured panel and the outsider-coloured one. When both colours are
+     * the same material the lists hold the same entity.
      */
     private record Panels(List<UUID> own, List<UUID> foreign) {
         List<UUID> all() {
@@ -393,14 +395,15 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             if (start != null) {
                 segments.add(new int[] {start, previous});
             }
-            for (int[] seg : segments) {
+            for (int i = 0; i < segments.size(); i++) {
+                int[] seg = segments.get(i);
                 ChunkKey first = alongX ? new ChunkKey(g.world(), seg[0], g.line()) : new ChunkKey(g.world(), g.line(), seg[0]);
                 ChunkKey last = alongX ? new ChunkKey(g.world(), seg[1], g.line()) : new ChunkKey(g.world(), g.line(), seg[1]);
                 int dx = alongX ? 1 : 0;
                 int dz = alongX ? 0 : 1;
                 End startKind = endKind(claim, first.offset(-dx, -dz), g.side());
                 End endKind = endKind(claim, last.offset(dx, dz), g.side());
-                runs.add(new Run(claim.getOwner(), g.world(), g.side(), g.line(), seg[0], seg[1], startKind, endKind));
+                runs.add(new Run(claim.getOwner(), g.world(), g.side(), g.line(), seg[0], seg[1], startKind, endKind, i % 2 == 1));
             }
         }
         return runs;
@@ -430,32 +433,44 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         // North/south panels sit INSET inside the chunk line, west/east panels 2*INSET: they cross each other at
         // corners with every face at least INSET apart. At an outer corner the north/south panel stops INSET
         // short and the west/east one runs through it; at an inner corner both run through each other.
+        // Runs cut by MAX_RUN overlap their neighbour by 2*INSET, and every other one sits 2*INSET deeper, so
+        // the seam is a continuous wall with a 2*INSET step and still no shared planes (checked for all corner
+        // combinations: every end cap stays at least INSET from every face it could coincide with).
         int lineBlock = run.line() << 4;
         int fromBlock = run.from() << 4;
         int toBlock = (run.to() + 1) << 4;
+        float shift = run.shifted() ? 2 * INSET : 0f;
         double x0;
         double z0;
         double lenX;
         double lenZ;
         if (run.alongX()) {
-            z0 = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + INSET : lineBlock + 16 - INSET - t;
+            z0 = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + INSET + shift : lineBlock + 16 - INSET - t - shift;
             lenZ = t;
-            double xs = fromBlock + (run.start() == End.INNER ? -(3 * INSET + t) : INSET);
-            double xe = toBlock + (run.end() == End.INNER ? 3 * INSET + t : -INSET);
+            double xs = fromBlock + switch (run.start()) {
+                case INNER -> -(3 * INSET + t);
+                case CONVEX -> INSET;
+                case SPLIT -> -INSET;
+            };
+            double xe = toBlock + switch (run.end()) {
+                case INNER -> 3 * INSET + t;
+                case CONVEX -> -INSET;
+                case SPLIT -> INSET;
+            };
             x0 = xs;
             lenX = xe - xs;
         } else {
-            x0 = run.side() == BoundaryEdge.Side.WEST ? lineBlock + 2 * INSET : lineBlock + 16 - 2 * INSET - t;
+            x0 = run.side() == BoundaryEdge.Side.WEST ? lineBlock + 2 * INSET + shift : lineBlock + 16 - 2 * INSET - t - shift;
             lenX = t;
             double zs = fromBlock + switch (run.start()) {
                 case INNER -> -(2 * INSET + t);
                 case CONVEX -> 2 * INSET;
-                case SPLIT -> INSET;
+                case SPLIT -> -INSET;
             };
             double ze = toBlock + switch (run.end()) {
                 case INNER -> 2 * INSET + t;
                 case CONVEX -> -2 * INSET;
-                case SPLIT -> -INSET;
+                case SPLIT -> INSET;
             };
             z0 = zs;
             lenZ = ze - zs;
@@ -508,29 +523,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         List<Material> materials = foreignMat == ownMat ? List.of(ownMat) : List.of(ownMat, foreignMat);
         List<List<UUID>> ids = new ArrayList<>();
         for (Material material : materials) {
-            List<UUID> list = new ArrayList<>();
-            list.add(spawnPanel(world, loc, run, material, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId());
-            if (run.end() == End.SPLIT) {
-                // The seam between this run and the next is a 2*INSET gap. A sliver just behind it, offset so no
-                // face shares a plane with either neighbour, shows the same tint through the gap instead of sky.
-                double px0;
-                double pz0;
-                double plenX;
-                double plenZ;
-                if (run.alongX()) {
-                    px0 = toBlock - 2 * INSET;
-                    plenX = 4 * INSET;
-                    pz0 = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + 2 * INSET + t : lineBlock + 16 - 2 * INSET - 2 * t;
-                    plenZ = t;
-                } else {
-                    pz0 = toBlock - 2 * INSET;
-                    plenZ = 4 * INSET;
-                    px0 = run.side() == BoundaryEdge.Side.WEST ? lineBlock + 3 * INSET + t : lineBlock + 16 - 3 * INSET - 2 * t;
-                    plenX = t;
-                }
-                list.add(spawnPanel(world, loc, run, material, px0, pz0, plenX, plenZ, minY, height, cullWidth, cullHeight).getUniqueId());
-            }
-            ids.add(list);
+            ids.add(List.of(spawnPanel(world, loc, run, material, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId()));
         }
         Panels panels = new Panels(ids.get(0), ids.get(ids.size() - 1));
         for (Player p : Bukkit.getOnlinePlayers()) {
