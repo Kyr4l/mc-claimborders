@@ -152,14 +152,20 @@ public final class ClaimCommand implements TabExecutor {
                 p.sendMessage(Text.color("&7You are already the owner."));
                 return;
             }
-            claims().trust(claim, target.getUniqueId());
-            p.sendMessage(cfg().msg("trusted", "player", name));
+            if (claims().trust(claim, target.getUniqueId())) {
+                p.sendMessage(cfg().msg("trusted", "player", name));
+            } else {
+                p.sendMessage(Text.color("&7" + name + " is already trusted."));
+            }
         } else {
             if (claims().untrust(claim, target.getUniqueId())) {
                 p.sendMessage(cfg().msg("untrusted", "player", name));
             } else {
                 p.sendMessage(Text.color("&7" + name + " was not trusted."));
             }
+        }
+        if (target instanceof Player online) {
+            plugin.borders().refresh(online);
         }
     }
 

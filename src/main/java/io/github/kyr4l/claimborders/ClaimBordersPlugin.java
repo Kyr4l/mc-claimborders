@@ -92,6 +92,10 @@ public final class ClaimBordersPlugin extends JavaPlugin {
         return entryGuard;
     }
 
+    public void forgetCooldown(Player player) {
+        lastMessage.remove(player.getUniqueId());
+    }
+
     /** Sends a message unless the same player got one within the configured cooldown. */
     public void sendCooled(Player player, String message) {
         long now = System.currentTimeMillis();

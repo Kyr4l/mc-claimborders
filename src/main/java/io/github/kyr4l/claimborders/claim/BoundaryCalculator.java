@@ -11,7 +11,11 @@ public final class BoundaryCalculator {
 
     /** Edges of {@code chunk} whose neighbour is not part of the same claim. Empty if the chunk is unclaimed. */
     public static List<BoundaryEdge> edgesOf(ClaimManager claims, ChunkKey chunk) {
-        Claim claim = claims.getClaimAt(chunk);
+        return edgesOf(claims.getClaimAt(chunk), chunk);
+    }
+
+    /** Edges of {@code chunk} assuming it belongs to {@code claim}. */
+    public static List<BoundaryEdge> edgesOf(Claim claim, ChunkKey chunk) {
         if (claim == null) {
             return List.of();
         }

@@ -121,6 +121,14 @@ public final class BorderService implements Listener {
         return now;
     }
 
+    /** Re-applies what this player should see (trust changed, world changed...). */
+    public void refresh(Player player) {
+        if (renderer != null) {
+            renderer.clear(player);
+            renderer.onJoin(player);
+        }
+    }
+
     /** Diagnostics for /claim admin stats. */
     public String debug(Player player) {
         if (renderer == null) {
@@ -174,7 +182,7 @@ public final class BorderService implements Listener {
                 if (trusted && !showing) {
                     continue;
                 }
-                for (BoundaryEdge edge : BoundaryCalculator.edgesOf(claims, key)) {
+                for (BoundaryEdge edge : BoundaryCalculator.edgesOf(claim, key)) {
                     if (edge.distanceSquared(px, pz) <= r2) {
                         out.add(new EdgeView(edge, claim, trusted));
                     }
@@ -196,6 +204,7 @@ public final class BorderService implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
         showing.remove(e.getPlayer().getUniqueId());
+        plugin.forgetCooldown(e.getPlayer());
         if (renderer != null) {
             renderer.clear(e.getPlayer());
         }

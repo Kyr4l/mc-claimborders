@@ -185,28 +185,40 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
     }
 
-    /** Make the entities of this chunk match its current boundary edges. */
+    /**
+     * Make the entities of this chunk match its current boundary edges. The length of a west/east panel
+     * depends on whether a north/south panel exists in the same chunk, so any change respawns the whole chunk.
+     */
     private void syncChunk(ChunkKey key) {
         if (!key.isLoaded()) {
             return;
         }
         Set<BoundaryEdge> wanted = new HashSet<>(BoundaryCalculator.edgesOf(plugin.claims(), key));
+        Set<BoundaryEdge> alive = new HashSet<>();
         for (BoundaryEdge.Side side : BoundaryEdge.Side.values()) {
             BoundaryEdge edge = new BoundaryEdge(key, side);
             UUID existing = entities.get(edge);
-            boolean alive = existing != null && Bukkit.getEntity(existing) != null;
-            if (wanted.contains(edge)) {
-                if (!alive) {
-                    entities.remove(edge);
-                    spawnEdge(edge);
-                }
+            if (existing != null && Bukkit.getEntity(existing) != null) {
+                alive.add(edge);
             } else if (existing != null) {
-                removeEdge(edge);
+                entities.remove(edge);
             }
+        }
+        if (alive.equals(wanted)) {
+            return;
+        }
+        for (BoundaryEdge edge : alive) {
+            removeEdge(edge);
+        }
+        for (BoundaryEdge edge : wanted) {
+            spawnEdge(edge, wanted);
         }
     }
 
-    private void spawnEdge(BoundaryEdge edge) {
+    /** Gap kept between a panel and the chunk line, and between panels. Keeps faces off each other's planes. */
+    private static final float INSET = 0.025f;
+
+    private void spawnEdge(BoundaryEdge edge, Set<BoundaryEdge> chunkEdges) {
         World world = edge.chunk().bukkitWorld();
         if (world == null) {
             return;
@@ -234,17 +246,30 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         float translationY = minY - originY;
         float aboveOrigin = Math.max(2f, minY + height - originY);
 
+        // Every panel sits INSET inside its own chunk. Panels along X run the full (inset) length; panels along Z
+        // are shortened where a north/south panel occupies the corner. Result: no two panels share a face plane,
+        // so translucent faces never z-fight, and facing panels of two different claims stay 2*INSET apart.
+        int bx = edge.chunk().minBlockX();
+        int bz = edge.chunk().minBlockZ();
         double x;
         double z;
         Vector3f scale;
         if (edge.alongX()) {
-            x = edge.chunk().minBlockX();
-            z = edge.side() == BoundaryEdge.Side.NORTH ? edge.chunk().minBlockZ() : edge.chunk().minBlockZ() + 16 - thickness;
-            scale = new Vector3f(16f, height, thickness);
+            x = bx + INSET;
+            z = edge.side() == BoundaryEdge.Side.NORTH ? bz + INSET : bz + 16 - INSET - thickness;
+            scale = new Vector3f(16f - 2 * INSET, height, thickness);
         } else {
-            x = edge.side() == BoundaryEdge.Side.WEST ? edge.chunk().minBlockX() : edge.chunk().minBlockX() + 16 - thickness;
-            z = edge.chunk().minBlockZ();
-            scale = new Vector3f(thickness, height, 16f);
+            x = edge.side() == BoundaryEdge.Side.WEST ? bx + INSET : bx + 16 - INSET - thickness;
+            float zStart = bz + INSET;
+            float zEnd = bz + 16 - INSET;
+            if (chunkEdges.contains(new BoundaryEdge(edge.chunk(), BoundaryEdge.Side.NORTH))) {
+                zStart += thickness + INSET;
+            }
+            if (chunkEdges.contains(new BoundaryEdge(edge.chunk(), BoundaryEdge.Side.SOUTH))) {
+                zEnd -= thickness + INSET;
+            }
+            z = zStart;
+            scale = new Vector3f(thickness, height, zEnd - zStart);
         }
 
         Location loc = new Location(world, x, originY, z);
