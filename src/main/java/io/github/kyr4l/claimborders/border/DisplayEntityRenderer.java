@@ -444,10 +444,14 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         // Runs cut by MAX_RUN overlap their neighbour by 2*INSET, and every other one sits 2*INSET deeper, so
         // the seam is a continuous wall with a 2*INSET step and still no shared planes (checked for all corner
         // combinations: every end cap stays at least INSET from every face it could coincide with).
+        // TEXT style panels are flat quads: a depth step between overlapping neighbours would show as a slit at
+        // grazing angles, so they stay in one plane and overlap by a hair instead (sub-pixel z-fight only).
+        boolean flat = cfg.displayStyle() == ClaimConfig.DisplayStyle.TEXT;
         int lineBlock = run.line() << 4;
         int fromBlock = run.from() << 4;
         int toBlock = (run.to() + 1) << 4;
-        float shift = run.shifted() ? 2 * INSET : 0f;
+        float shift = run.shifted() && !flat ? 2 * INSET : 0f;
+        float splitOverlap = flat ? 0.002f : INSET;
         double x0;
         double z0;
         double lenX;
@@ -458,12 +462,12 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             double xs = fromBlock + switch (run.start()) {
                 case INNER -> -(3 * INSET + t);
                 case CONVEX -> INSET;
-                case SPLIT -> -INSET;
+                case SPLIT -> -splitOverlap;
             };
             double xe = toBlock + switch (run.end()) {
                 case INNER -> 3 * INSET + t;
                 case CONVEX -> -INSET;
-                case SPLIT -> INSET;
+                case SPLIT -> splitOverlap;
             };
             x0 = xs;
             lenX = xe - xs;
@@ -473,12 +477,12 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             double zs = fromBlock + switch (run.start()) {
                 case INNER -> -(2 * INSET + t);
                 case CONVEX -> 2 * INSET;
-                case SPLIT -> -INSET;
+                case SPLIT -> -splitOverlap;
             };
             double ze = toBlock + switch (run.end()) {
                 case INNER -> 2 * INSET + t;
                 case CONVEX -> -2 * INSET;
-                case SPLIT -> INSET;
+                case SPLIT -> splitOverlap;
             };
             z0 = zs;
             lenZ = ze - zs;
