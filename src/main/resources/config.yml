@@ -69,7 +69,9 @@ border:
     radius: 32
 
   display:
-    material: LIGHT_BLUE_STAINED_GLASS
+    # A *_STAINED_GLASS_PANE gives a flat, uniform tint. A full block (e.g. LIGHT_BLUE_STAINED_GLASS, ICE)
+    # stretches its whole texture over the panel, frame included.
+    material: LIGHT_BLUE_STAINED_GLASS_PANE
     # FULL = from the world's lowest to highest Y. A number = panel height, placed 2 blocks under the surface.
     height: FULL
     thickness: 0.08

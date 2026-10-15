@@ -46,13 +46,15 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     /** Gap between a panel and the chunk line, and between panels. Keeps faces off each other's planes. */
     private static final float INSET = 0.025f;
 
+    /** How a run ends: at an outer corner, at an inner corner, or cut by MAX_RUN with the border continuing. */
+    private enum End { CONVEX, INNER, SPLIT }
+
     /**
      * One straight panel. {@code line} is the chunk row (north/south) or column (west/east) it runs along;
-     * {@code from..to} are the chunk coordinates along it. {@code shortenStart/End} are set on west/east
-     * runs whose end chunk also has a north/south panel occupying the corner.
+     * {@code from..to} are the chunk coordinates along it. The end kinds decide how far the panel reaches
+     * at each end so corners close without any two faces sharing a plane.
      */
-    private record Run(UUID owner, UUID world, BoundaryEdge.Side side, int line, int from, int to,
-                       boolean shortenStart, boolean shortenEnd) {
+    private record Run(UUID owner, UUID world, BoundaryEdge.Side side, int line, int from, int to, End start, End end) {
 
         boolean alongX() {
             return side == BoundaryEdge.Side.NORTH || side == BoundaryEdge.Side.SOUTH;
@@ -337,17 +339,27 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                 segments.add(new int[] {start, previous});
             }
             for (int[] seg : segments) {
-                boolean shortenStart = false;
-                boolean shortenEnd = false;
-                if (!alongX) {
-                    // A west/east panel yields the corner to the north/south panel of the same chunk.
-                    shortenStart = !claim.contains(new ChunkKey(g.world(), g.line(), seg[0]).offset(0, -1));
-                    shortenEnd = !claim.contains(new ChunkKey(g.world(), g.line(), seg[1]).offset(0, 1));
-                }
-                runs.add(new Run(claim.getOwner(), g.world(), g.side(), g.line(), seg[0], seg[1], shortenStart, shortenEnd));
+                ChunkKey first = alongX ? new ChunkKey(g.world(), seg[0], g.line()) : new ChunkKey(g.world(), g.line(), seg[0]);
+                ChunkKey last = alongX ? new ChunkKey(g.world(), seg[1], g.line()) : new ChunkKey(g.world(), g.line(), seg[1]);
+                int dx = alongX ? 1 : 0;
+                int dz = alongX ? 0 : 1;
+                End startKind = endKind(claim, first.offset(-dx, -dz), g.side());
+                End endKind = endKind(claim, last.offset(dx, dz), g.side());
+                runs.add(new Run(claim.getOwner(), g.world(), g.side(), g.line(), seg[0], seg[1], startKind, endKind));
             }
         }
         return runs;
+    }
+
+    /** {@code next} is the chunk just past the run's end along its direction. */
+    private static End endKind(Claim claim, ChunkKey next, BoundaryEdge.Side side) {
+        if (!claim.contains(next)) {
+            return End.CONVEX;              // the border turns toward the claim: outer corner
+        }
+        if (!claim.contains(next.offset(side.dx, side.dz))) {
+            return End.SPLIT;               // the border goes straight on; this run was cut by MAX_RUN
+        }
+        return End.INNER;                   // the border turns away from the claim: inner corner
     }
 
     private void spawnRun(Run run) {
@@ -396,36 +408,65 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         float translationY = minY - originY;
         float aboveOrigin = Math.max(2f, minY + height - originY);
 
-        // Every panel sits INSET inside its own chunks. Panels along X run the full (inset) length; panels along Z
-        // yield the corners to them. No two panels share a face plane, so translucent faces never z-fight, and
-        // facing panels of two different claims stay 2*INSET apart.
+        // Geometry. Faces must never share a plane (translucent z-fighting), and corners must be sealed.
+        // North/south panels sit INSET inside the chunk line, west/east panels 2*INSET: they cross each other at
+        // corners with every face at least INSET apart. At an outer corner the north/south panel stops INSET
+        // short and the west/east one runs through it; at an inner corner both run through each other.
+        float t = thickness;
         int lineBlock = run.line() << 4;
         int fromBlock = run.from() << 4;
         int toBlock = (run.to() + 1) << 4;
-        double x;
-        double z;
-        Vector3f scale;
+        double x0;
+        double z0;
+        double lenX;
+        double lenZ;
         if (run.alongX()) {
-            x = fromBlock + INSET;
-            z = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + INSET : lineBlock + 16 - INSET - thickness;
-            scale = new Vector3f(toBlock - fromBlock - 2 * INSET, height, thickness);
+            z0 = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + INSET : lineBlock + 16 - INSET - t;
+            lenZ = t;
+            double xs = fromBlock + (run.start() == End.INNER ? -(3 * INSET + t) : INSET);
+            double xe = toBlock + (run.end() == End.INNER ? 3 * INSET + t : -INSET);
+            x0 = xs;
+            lenX = xe - xs;
         } else {
-            x = run.side() == BoundaryEdge.Side.WEST ? lineBlock + INSET : lineBlock + 16 - INSET - thickness;
-            float zStart = fromBlock + INSET + (run.shortenStart() ? thickness + INSET : 0f);
-            float zEnd = toBlock - INSET - (run.shortenEnd() ? thickness + INSET : 0f);
-            z = zStart;
-            scale = new Vector3f(thickness, height, zEnd - zStart);
+            x0 = run.side() == BoundaryEdge.Side.WEST ? lineBlock + 2 * INSET : lineBlock + 16 - 2 * INSET - t;
+            lenX = t;
+            double zs = fromBlock + switch (run.start()) {
+                case INNER -> -(2 * INSET + t);
+                case CONVEX -> 2 * INSET;
+                case SPLIT -> INSET;
+            };
+            double ze = toBlock + switch (run.end()) {
+                case INNER -> 2 * INSET + t;
+                case CONVEX -> -2 * INSET;
+                case SPLIT -> -INSET;
+            };
+            z0 = zs;
+            lenZ = ze - zs;
+        }
+        double x = x0;
+        double z = z0;
+
+        // A glass pane's centre post is 2/16 wide and uses only the uniform middle strip of the texture, so a
+        // scaled pane is a flat tint with no stretched frame. Map the post [7/16, 9/16] onto the panel box.
+        boolean pane = cfg.displayMaterial().createBlockData() instanceof org.bukkit.block.data.type.GlassPane;
+        Vector3f scale;
+        Vector3f translation;
+        if (pane) {
+            scale = new Vector3f((float) (lenX * 8), height, (float) (lenZ * 8));
+            translation = new Vector3f((float) (-3.5 * lenX), translationY, (float) (-3.5 * lenZ));
+        } else {
+            scale = new Vector3f((float) lenX, height, (float) lenZ);
+            translation = new Vector3f(0f, translationY, 0f);
         }
 
         Location loc = new Location(world, x, originY, z);
         Claim claim = plugin.claims().getClaimOf(run.owner());
-        final float fTranslationY = translationY;
         final float fAboveOrigin = aboveOrigin;
         // Configure before the entity is added to the world: one spawn packet with the final state, and the
         // per-player hide decisions are already in place, so nobody sees a one-tick flash.
         BlockDisplay display = world.spawn(loc, BlockDisplay.class, (java.util.function.Consumer<BlockDisplay>) d -> {
             d.setBlock(cfg.displayMaterial().createBlockData());
-            d.setTransformation(new Transformation(new Vector3f(0f, fTranslationY, 0f), new Quaternionf(), scale, new Quaternionf()));
+            d.setTransformation(new Transformation(translation, new Quaternionf(), scale, new Quaternionf()));
             d.setBrightness(new Display.Brightness(15, 15));
             // Culling box is centred on the origin horizontally and starts at the origin vertically.
             d.setDisplayWidth(2f * run.length() * 16f + 4f);

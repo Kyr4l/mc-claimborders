@@ -122,7 +122,7 @@ public final class ClaimConfig {
         ghostOutlineMaterial = parseMaterial(c.getString("border.ghost-blocks.outline-material"), Material.SEA_LANTERN, log);
         ghostRadius = Math.max(8, c.getInt("border.ghost-blocks.radius", 32));
 
-        displayMaterial = parseMaterial(c.getString("border.display.material"), Material.LIGHT_BLUE_STAINED_GLASS, log);
+        displayMaterial = parseMaterial(c.getString("border.display.material"), Material.LIGHT_BLUE_STAINED_GLASS_PANE, log);
         String h = String.valueOf(c.get("border.display.height", "FULL")).trim();
         int parsedHeight;
         try {
