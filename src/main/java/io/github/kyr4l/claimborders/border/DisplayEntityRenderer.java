@@ -87,10 +87,19 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
     }
 
-    /** The entities of one run: the member-coloured panel and the outsider-coloured one. */
-    private record Panels(UUID own, UUID foreign) {
+    /**
+     * The entities of one run: member-coloured panels and outsider-coloured ones (the main panel plus, at a
+     * MAX_RUN split, a sliver that sits behind the seam). When both colours are the same material the lists
+     * hold the same entities.
+     */
+    private record Panels(List<UUID> own, List<UUID> foreign) {
         List<UUID> all() {
-            return own.equals(foreign) ? List.of(own) : List.of(own, foreign);
+            if (own.equals(foreign)) {
+                return own;
+            }
+            List<UUID> all = new ArrayList<>(own);
+            all.addAll(foreign);
+            return all;
         }
     }
 
@@ -167,7 +176,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             Run run = runByEdge.get(view.edge());
             Panels panels = run == null ? null : entities.get(run);
             if (panels != null) {
-                wanted.add(view.trusted() ? panels.own() : panels.foreign());
+                wanted.addAll(view.trusted() ? panels.own() : panels.foreign());
             }
         }
         Set<UUID> shown = shownNear.computeIfAbsent(viewer.getUniqueId(), k -> new HashSet<>());
@@ -226,17 +235,8 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         }
     }
 
+    /** Decides which colour (if any) this player sees. In NEAR mode everything starts hidden. */
     private void applyVisibility(Player player, Panels panels, Claim claim) {
-        Entity own = Bukkit.getEntity(panels.own());
-        Entity foreign = Bukkit.getEntity(panels.foreign());
-        if (own == null || foreign == null) {
-            return;
-        }
-        applyVisibility(player, own, foreign, claim);
-    }
-
-    /** Decides which of the two panels (if any) this player sees. In NEAR mode both start hidden. */
-    private void applyVisibility(Player player, Entity own, Entity foreign, Claim claim) {
         boolean showOwn = false;
         boolean showForeign = false;
         if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.ALWAYS) {
@@ -247,19 +247,25 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                 showForeign = true;
             }
         }
-        if (own == foreign) {
-            toggle(player, own, showOwn || showForeign);
+        if (panels.own().equals(panels.foreign())) {
+            toggle(player, panels.own(), showOwn || showForeign);
         } else {
-            toggle(player, own, showOwn);
-            toggle(player, foreign, showForeign);
+            toggle(player, panels.own(), showOwn);
+            toggle(player, panels.foreign(), showForeign);
         }
     }
 
-    private void toggle(Player player, Entity e, boolean visible) {
-        if (visible) {
-            player.showEntity(plugin, e);
-        } else {
-            player.hideEntity(plugin, e);
+    private void toggle(Player player, List<UUID> ids, boolean visible) {
+        for (UUID id : ids) {
+            Entity e = Bukkit.getEntity(id);
+            if (e == null) {
+                continue;
+            }
+            if (visible) {
+                player.showEntity(plugin, e);
+            } else {
+                player.hideEntity(plugin, e);
+            }
         }
     }
 
@@ -499,13 +505,38 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         Claim claim = plugin.claims().getClaimOf(run.owner());
         Material ownMat = cfg.displayMaterial();
         Material foreignMat = cfg.displayForeignMaterial();
-        BlockDisplay own = spawnPanel(world, loc, run, ownMat, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight);
-        BlockDisplay foreign = foreignMat == ownMat ? own
-                : spawnPanel(world, loc, run, foreignMat, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight);
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            applyVisibility(p, own, foreign, claim);
+        List<Material> materials = foreignMat == ownMat ? List.of(ownMat) : List.of(ownMat, foreignMat);
+        List<List<UUID>> ids = new ArrayList<>();
+        for (Material material : materials) {
+            List<UUID> list = new ArrayList<>();
+            list.add(spawnPanel(world, loc, run, material, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId());
+            if (run.end() == End.SPLIT) {
+                // The seam between this run and the next is a 2*INSET gap. A sliver just behind it, offset so no
+                // face shares a plane with either neighbour, shows the same tint through the gap instead of sky.
+                double px0;
+                double pz0;
+                double plenX;
+                double plenZ;
+                if (run.alongX()) {
+                    px0 = toBlock - 2 * INSET;
+                    plenX = 4 * INSET;
+                    pz0 = run.side() == BoundaryEdge.Side.NORTH ? lineBlock + 2 * INSET + t : lineBlock + 16 - 2 * INSET - 2 * t;
+                    plenZ = t;
+                } else {
+                    pz0 = toBlock - 2 * INSET;
+                    plenZ = 4 * INSET;
+                    px0 = run.side() == BoundaryEdge.Side.WEST ? lineBlock + 3 * INSET + t : lineBlock + 16 - 3 * INSET - 2 * t;
+                    plenX = t;
+                }
+                list.add(spawnPanel(world, loc, run, material, px0, pz0, plenX, plenZ, minY, height, cullWidth, cullHeight).getUniqueId());
+            }
+            ids.add(list);
         }
-        entities.put(run, new Panels(own.getUniqueId(), foreign.getUniqueId()));
+        Panels panels = new Panels(ids.get(0), ids.get(ids.size() - 1));
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            applyVisibility(p, panels, claim);
+        }
+        entities.put(run, panels);
     }
 
     private BlockDisplay spawnPanel(World world, Location loc, Run run, Material material,
