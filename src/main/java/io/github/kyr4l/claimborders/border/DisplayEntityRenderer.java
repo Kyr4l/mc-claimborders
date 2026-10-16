@@ -37,18 +37,20 @@ import java.util.TreeSet;
 import java.util.UUID;
 
 /**
- * Translucent BlockDisplay panels along claim borders: a "force field" wall with no per-player packet
- * work beyond show/hide. Every straight run of boundary (up to {@link #MAX_RUN} chunks) is one panel in
- * the member colour plus one in the outsider colour at the same place; each player is shown only the one
- * that applies to them. Entities are non-persistent and tagged, so a crash or a PlugManX unload never
- * leaves garbage behind. Needs Minecraft 1.19.4 or newer.
+ * Translucent display-entity panels along claim borders: a "force field" wall with no per-player packet
+ * work beyond show/hide. Every straight run of boundary (up to {@link #MAX_RUN} chunks) is one panel per
+ * look (member, visitor, outsider) at the same place; each player is shown only the one that applies to
+ * them. BLOCK style scales glass panes, TEXT style stretches text-display background quads (free colour
+ * and opacity). Entities are non-persistent and tagged, so a crash or a PlugManX unload never leaves
+ * garbage behind. Needs Minecraft 1.19.4 or newer.
  *
  * <p>Client rendering rules this code is built around:
  * <ul>
- *   <li>A display entity with no culling width/height is never frustum-culled (vanilla and Sodium both
- *       honour that flag), so the panel can be any size without blinking at the edges of the view.</li>
- *   <li>It is still only drawn if the chunk section holding the entity's position is built, so the origin
- *       sits at terrain level in the middle chunk of the run, never underground.</li>
+ *   <li>The client frustum-tests a display entity by a box centred on its origin and extending upward,
+ *       so the box is sized to cover the whole wall and the origin sits near the lowest terrain along the
+ *       run (border.display.culling-box: false drops the box; the client then never frustum-culls it).</li>
+ *   <li>It is only drawn if the chunk section holding the entity's position is built, so the origin is
+ *       never placed below the built section at its column.</li>
  *   <li>It is only drawn within viewRange * 64 blocks of that origin, so the view range is maxed out.</li>
  *   <li>The server only sends it to players within the entity tracking range of the origin; with the origin
  *       in the middle of a run of at most MAX_RUN chunks, no point of the panel is far from it.</li>

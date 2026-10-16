@@ -19,6 +19,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
@@ -65,6 +66,14 @@ public final class EntryGuard implements Listener {
             }
         }
         glowing.removeIf(id -> Bukkit.getPlayer(id) == null);
+    }
+
+    /** The glowing flag is saved with the player, so clear it before they leave or it sticks on rejoin. */
+    @EventHandler
+    public void onQuit(PlayerQuitEvent e) {
+        if (glowing.remove(e.getPlayer().getUniqueId())) {
+            e.getPlayer().setGlowing(false);
+        }
     }
 
     public void shutdown() {

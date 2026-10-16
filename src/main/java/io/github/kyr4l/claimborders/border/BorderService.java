@@ -61,9 +61,8 @@ public final class BorderService implements Listener {
         renderer.start();
         Bukkit.getPluginManager().registerEvents(this, plugin);
         plugin.claims().addListener(claimListener);
-        if (renderer.needsTick()) {
-            task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, cfg.intervalTicks(), cfg.intervalTicks());
-        }
+        // Always ticks: preview expiry must run even for renderers that do no per-player work.
+        task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, cfg.intervalTicks(), cfg.intervalTicks());
         plugin.getLogger().info("Border renderer: " + renderer.getClass().getSimpleName());
     }
 
@@ -202,6 +201,9 @@ public final class BorderService implements Listener {
             return;
         }
         expirePreviews();
+        if (!renderer.needsTick()) {
+            return;
+        }
         int radius = renderer.radius();
         for (Player player : Bukkit.getOnlinePlayers()) {
             List<EdgeView> edges = collectEdges(player, radius);
