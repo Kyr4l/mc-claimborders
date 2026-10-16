@@ -53,6 +53,7 @@ public final class ZoneMessages {
     private void tick() {
         ClaimConfig cfg = plugin.settings();
         if (!cfg.zoneMessagesEnabled()) {
+            states.clear();
             return;
         }
         for (Player p : Bukkit.getOnlinePlayers()) {
@@ -62,6 +63,15 @@ public final class ZoneMessages {
             State state = states.computeIfAbsent(p.getUniqueId(), k -> new State());
             Location loc = p.getLocation();
             Claim here = plugin.claims().getClaimAt(loc);
+            if (state.inside != null && (here == null || !here.getOwner().equals(state.inside))) {
+                // Crossed out of the claim they were in (or straight into another one).
+                Claim left = plugin.claims().getClaimOf(state.inside);
+                if (left != null && left.isMessagesEnabled() && left.canEnter(p)) {
+                    Text.actionBar(p, cfg.zoneMsg(left.isOwner(p.getUniqueId()) ? "exit-owner" : "exit", left, p));
+                }
+                state.inside = null;
+                state.welcomed = false;
+            }
             if (here != null) {
                 state.approached = null;
                 if (!here.getOwner().equals(state.inside)) {
@@ -78,9 +88,6 @@ public final class ZoneMessages {
                 }
                 continue;
             }
-            state.inside = null;
-            state.welcomed = false;
-
             Claim nearest = null;
             double nearestDist = Double.MAX_VALUE;
             ChunkKey center = ChunkKey.of(loc);

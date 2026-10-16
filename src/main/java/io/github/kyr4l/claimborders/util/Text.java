@@ -29,6 +29,9 @@ public final class Text {
 
     /** Shows a line above the hotbar (action bar); the text is already colorised. */
     public static void actionBar(Player player, String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
         player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
     }
 

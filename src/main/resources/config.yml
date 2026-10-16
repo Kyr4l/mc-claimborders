@@ -103,8 +103,8 @@ border:
     reveal: NEAR
     reveal-radius: 24
 
-# Short lines above the hotbar (action bar) when players reach a claim. Owners toggle them per claim
-# with /claim messages. %owner% and %player% are replaced.
+# Short lines above the hotbar (action bar) when players reach, enter or leave a claim. Owners toggle
+# them per claim with /claim messages. %owner% and %player% are replaced. Empty string = no message.
 zone-messages:
   enabled: true
   welcome-depth: 4          # blocks inside the border before members and visitors are welcomed
@@ -113,6 +113,8 @@ zone-messages:
   welcome: "&bAccess granted. Entering %owner%'s territory."
   welcome-visitor: "&eVisitor access granted. Entering %owner%'s territory."
   approach: "&c&lWARNING&r&c: Restricted area. %owner%'s territory. Entry prohibited."
+  exit-owner: "&7Leaving home territory."
+  exit: "&7Leaving %owner%'s territory."
 
 messages:
   prefix: "&b[Claims]&r "
