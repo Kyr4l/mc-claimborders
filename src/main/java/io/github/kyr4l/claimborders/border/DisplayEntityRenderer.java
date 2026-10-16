@@ -222,6 +222,30 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     }
 
     /**
+     * Re-assert visibility for every panel. NEAR: everything not in the viewer's shown set is hidden.
+     * ALWAYS: the per-level rule is re-applied. Hiding a hidden entity (or showing a visible one) sends no
+     * packet, so this is cheap and heals any drift (reconnects, missed join-time calls, other plugins).
+     */
+    @Override
+    public void reconcile(Player viewer) {
+        if (plugin.settings().displayReveal() == ClaimConfig.RevealMode.NEAR) {
+            Set<UUID> shown = shownNear.getOrDefault(viewer.getUniqueId(), Set.of());
+            for (Panels panels : entities.values()) {
+                for (UUID id : panels.all()) {
+                    if (!shown.contains(id)) {
+                        Entity e = Bukkit.getEntity(id);
+                        if (e != null) {
+                            hide(viewer, e);
+                        }
+                    }
+                }
+            }
+        } else {
+            onJoin(viewer);
+        }
+    }
+
+    /**
      * Bukkit throws if a plugin that is disabling calls hide/showEntity. While disabling we only remove the
      * entities, which clears every client anyway, so these become no-ops.
      */

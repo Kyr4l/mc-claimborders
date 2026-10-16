@@ -35,6 +35,13 @@ public interface BorderRenderer {
     /** Remove anything shown to this viewer (quit, world change, renderer swap). */
     void clear(Player viewer);
 
+    /**
+     * Re-assert for this viewer what they should and should not see, regardless of any bookkeeping.
+     * Called about once a second; implementations must make it cheap when nothing changed.
+     */
+    default void reconcile(Player viewer) {
+    }
+
     /** Viewer toggled /claim show. */
     default void onShowToggle(Player viewer, boolean showing) {
     }

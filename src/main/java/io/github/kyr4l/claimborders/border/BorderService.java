@@ -44,6 +44,7 @@ public final class BorderService implements Listener {
     private static final long VIEW_AS_MILLIS = 10L * 60 * 1000;
     private BorderRenderer renderer;
     private BukkitTask task;
+    private int ticks;
     private final Consumer<ClaimManager.ClaimChange> claimListener = change -> {
         if (renderer != null) {
             renderer.onClaimChange(change);
@@ -201,13 +202,16 @@ public final class BorderService implements Listener {
             return;
         }
         expirePreviews();
-        if (!renderer.needsTick()) {
-            return;
-        }
+        ticks++;
+        boolean reconcile = ticks % Math.max(1, 20 / plugin.settings().intervalTicks()) == 0;
         int radius = renderer.radius();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            List<EdgeView> edges = collectEdges(player, radius);
-            renderer.render(player, edges);
+            if (renderer.needsTick()) {
+                renderer.render(player, collectEdges(player, radius));
+            }
+            if (reconcile) {
+                renderer.reconcile(player);
+            }
         }
     }
 
@@ -255,6 +259,13 @@ public final class BorderService implements Listener {
     public void onJoin(PlayerJoinEvent e) {
         if (renderer != null) {
             renderer.onJoin(e.getPlayer());
+            // Again once the player is fully in the world and tracked; join-time calls may land too early.
+            Player p = e.getPlayer();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (p.isOnline() && renderer != null) {
+                    refresh(p);
+                }
+            }, 20L);
         }
     }
 
