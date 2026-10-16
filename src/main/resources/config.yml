@@ -111,7 +111,7 @@ zone-messages:
   approach-distance: 16     # blocks before the border where outsiders are warned (before the push zone)
   welcome-owner: "&bAccess granted. Welcome back, %player%."
   welcome: "&bAccess granted. Entering %owner%'s territory."
-  welcome-visitor: "&eVisitor access granted. %owner%'s territory. Observe only. Do not interfere."
+  welcome-visitor: "&eVisitor access granted. Entering %owner%'s territory."
   approach: "&c&lWARNING&r&c: Restricted area. %owner%'s territory. Entry prohibited."
 
 messages:
