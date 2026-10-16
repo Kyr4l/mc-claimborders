@@ -23,6 +23,7 @@ public final class Claim {
     private String ownerName;
     private final Map<UUID, Trusted> trusted = new LinkedHashMap<>();
     private final Set<ChunkKey> chunks = new LinkedHashSet<>();
+    private boolean messagesEnabled = true;
 
     public Claim(UUID owner, String ownerName) {
         this.owner = owner;
@@ -78,6 +79,15 @@ public final class Claim {
     /** Owner, member or visitor. */
     public boolean canEnter(Player player) {
         return levelOf(player.getUniqueId()).canEnter();
+    }
+
+    /** Whether welcome / approach messages are shown for this claim. */
+    public boolean isMessagesEnabled() {
+        return messagesEnabled;
+    }
+
+    void setMessagesEnabled(boolean enabled) {
+        this.messagesEnabled = enabled;
     }
 
     public boolean contains(ChunkKey key) {

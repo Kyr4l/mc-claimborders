@@ -1,7 +1,10 @@
 package io.github.kyr4l.claimborders.util;
 
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
+import org.bukkit.entity.Player;
 
 import java.util.Map;
 
@@ -22,6 +25,11 @@ public final class Text {
             out = out.replace("%" + e.getKey() + "%", String.valueOf(e.getValue()));
         }
         return color(out);
+    }
+
+    /** Shows a line above the hotbar (action bar); the text is already colorised. */
+    public static void actionBar(Player player, String message) {
+        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
     }
 
     /** Parses "#RRGGBB" or "RRGGBB"; falls back to the given default on bad input. */

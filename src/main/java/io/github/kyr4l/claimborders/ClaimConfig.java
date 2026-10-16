@@ -88,6 +88,11 @@ public final class ClaimConfig {
     private final RevealMode displayReveal;
     private final int displayRevealRadius;
 
+    private final boolean zoneMessagesEnabled;
+    private final double welcomeDepth;
+    private final double approachDistance;
+    private final Map<String, String> zoneMessages = new HashMap<>();
+
     private final String prefix;
     private final Map<String, String> messages = new HashMap<>();
 
@@ -163,6 +168,17 @@ public final class ClaimConfig {
         displayReveal = parseEnum(RevealMode.class, c.getString("border.display.reveal"), RevealMode.NEAR, log);
         displayRevealRadius = Math.max(4, c.getInt("border.display.reveal-radius", 24));
 
+        zoneMessagesEnabled = c.getBoolean("zone-messages.enabled", true);
+        welcomeDepth = Math.max(0, c.getDouble("zone-messages.welcome-depth", 4));
+        approachDistance = Math.max(1, c.getDouble("zone-messages.approach-distance", 16));
+        if (c.getConfigurationSection("zone-messages") != null) {
+            for (String key : c.getConfigurationSection("zone-messages").getKeys(false)) {
+                if (c.isString("zone-messages." + key)) {
+                    zoneMessages.put(key, c.getString("zone-messages." + key, ""));
+                }
+            }
+        }
+
         prefix = c.getString("messages.prefix", "&b[Claims]&r ");
         if (c.getConfigurationSection("messages") != null) {
             for (String key : c.getConfigurationSection("messages").getKeys(false)) {
@@ -202,6 +218,18 @@ public final class ClaimConfig {
             ph.put(kv[i], kv[i + 1]);
         }
         return Text.format(prefix + messages.getOrDefault(key, "&c<" + key + ">"), ph);
+    }
+
+    public boolean zoneMessagesEnabled() { return zoneMessagesEnabled; }
+    public double welcomeDepth() { return welcomeDepth; }
+    public double approachDistance() { return approachDistance; }
+
+    /** An action-bar message for a claim, with %owner% and %player% filled in. Empty string if unset. */
+    public String zoneMsg(String key, io.github.kyr4l.claimborders.claim.Claim claim, org.bukkit.entity.Player player) {
+        Map<String, String> ph = new HashMap<>();
+        ph.put("owner", claim.getOwnerName());
+        ph.put("player", player.getName());
+        return Text.format(zoneMessages.getOrDefault(key, ""), ph);
     }
 
     public int maxChunks() { return maxChunks; }

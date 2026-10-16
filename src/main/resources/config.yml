@@ -103,6 +103,17 @@ border:
     reveal: NEAR
     reveal-radius: 24
 
+# Short lines above the hotbar (action bar) when players reach a claim. Owners toggle them per claim
+# with /claim messages. %owner% and %player% are replaced.
+zone-messages:
+  enabled: true
+  welcome-depth: 4          # blocks inside the border before members and visitors are welcomed
+  approach-distance: 16     # blocks before the border where outsiders are warned (before the push zone)
+  welcome-owner: "&bWelcome home, %player%."
+  welcome: "&bWelcome to %owner%'s land, %player%."
+  welcome-visitor: "&eYou are visiting %owner%'s land. Look, but don't touch."
+  approach: "&c%owner%'s land ahead. You are not allowed in."
+
 messages:
   prefix: "&b[Claims]&r "
   claimed: "&aChunk claimed! &7(%count%/%limit%)"
@@ -120,5 +131,7 @@ messages:
   view-mode: "&7Border preview: &f%mode%"
   untrusted: "&e%player% is no longer trusted."
   ejected: "&eYou were moved out of &f%owner%&e's claim."
+  messages-on: "&aZone messages enabled for your claim."
+  messages-off: "&7Zone messages disabled for your claim."
   show-on: "&aClaim borders shown."
   show-off: "&7Claim borders hidden."

@@ -68,6 +68,9 @@ public final class ClaimStorage {
     private Claim readClaim(JsonObject o) {
         Claim claim = new Claim(UUID.fromString(o.get("owner").getAsString()),
                 o.has("ownerName") ? o.get("ownerName").getAsString() : "?");
+        if (o.has("messages")) {
+            claim.setMessagesEnabled(o.get("messages").getAsBoolean());
+        }
         if (o.has("trusted")) {
             for (JsonElement t : o.getAsJsonArray("trusted")) {
                 try {
@@ -101,6 +104,7 @@ public final class ClaimStorage {
             JsonObject o = new JsonObject();
             o.addProperty("owner", claim.getOwner().toString());
             o.addProperty("ownerName", claim.getOwnerName());
+            o.addProperty("messages", claim.isMessagesEnabled());
             JsonArray trusted = new JsonArray();
             claim.getTrusted().forEach((id, entry) -> {
                 JsonObject t = new JsonObject();

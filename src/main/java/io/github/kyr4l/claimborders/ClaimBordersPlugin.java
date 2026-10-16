@@ -5,6 +5,7 @@ import io.github.kyr4l.claimborders.claim.ClaimManager;
 import io.github.kyr4l.claimborders.command.ClaimCommand;
 import io.github.kyr4l.claimborders.protect.BlockProtection;
 import io.github.kyr4l.claimborders.protect.EntryGuard;
+import io.github.kyr4l.claimborders.protect.ZoneMessages;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
@@ -27,6 +28,7 @@ public final class ClaimBordersPlugin extends JavaPlugin {
     private ClaimManager claims;
     private BorderService borders;
     private EntryGuard entryGuard;
+    private ZoneMessages zoneMessages;
     private final Map<String, Long> lastMessage = new HashMap<>();
     /** Players who toggled /claim show. Survives renderer restarts. */
     private final Set<UUID> showToggles = new HashSet<>();
@@ -44,6 +46,7 @@ public final class ClaimBordersPlugin extends JavaPlugin {
 
         borders = new BorderService(this, showToggles);
         borders.start();
+        zoneMessages = new ZoneMessages(this);
 
         ClaimCommand executor = new ClaimCommand(this);
         for (String name : new String[] {"claim", "unclaim", "trust", "untrust"}) {
@@ -73,6 +76,11 @@ public final class ClaimBordersPlugin extends JavaPlugin {
         step("stop entry guard", () -> {
             if (entryGuard != null) {
                 entryGuard.shutdown();
+            }
+        });
+        step("stop zone messages", () -> {
+            if (zoneMessages != null) {
+                zoneMessages.shutdown();
             }
         });
         HandlerList.unregisterAll(this);
@@ -113,6 +121,10 @@ public final class ClaimBordersPlugin extends JavaPlugin {
 
     public EntryGuard entryGuard() {
         return entryGuard;
+    }
+
+    public ZoneMessages zoneMessages() {
+        return zoneMessages;
     }
 
     public void forgetCooldown(Player player) {

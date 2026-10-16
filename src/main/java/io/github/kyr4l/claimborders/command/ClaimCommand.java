@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 public final class ClaimCommand implements TabExecutor {
 
     private static final List<String> SUBS = List.of(
-            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "admin");
+            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "messages", "admin");
 
     private final ClaimBordersPlugin plugin;
 
@@ -75,6 +75,7 @@ public final class ClaimCommand implements TabExecutor {
             case "map" -> map(p);
             case "show" -> show(p);
             case "view" -> view(p, args);
+            case "messages" -> messages(p);
             default -> help(p);
         }
         return true;
@@ -92,6 +93,7 @@ public final class ClaimCommand implements TabExecutor {
         p.sendMessage(Text.color("&b/claim map &7- chunk map around you"));
         p.sendMessage(Text.color("&b/claim show &7- toggle your border display"));
         p.sendMessage(Text.color("&b/claim view member|visitor|outsider|off &7- preview how borders look for that level"));
+        p.sendMessage(Text.color("&b/claim messages &7- toggle the welcome / keep-out messages of your claim"));
         if (p.hasPermission("claimborders.admin")) {
             p.sendMessage(Text.color("&b/claim admin unclaim|unclaimall <player>|reload|stats"));
         }
@@ -276,6 +278,16 @@ public final class ClaimCommand implements TabExecutor {
         }
         plugin.borders().setViewAs(p, level);
         p.sendMessage(cfg().msg("view-mode", "mode", level == null ? "off" : level.name().toLowerCase(Locale.ROOT)));
+    }
+
+    private void messages(Player p) {
+        Claim claim = claims().getClaimOf(p.getUniqueId());
+        if (claim == null) {
+            p.sendMessage(Text.color("&cYou do not own any chunk yet. Claim one first."));
+            return;
+        }
+        boolean on = claims().toggleMessages(claim);
+        p.sendMessage(cfg().msg(on ? "messages-on" : "messages-off"));
     }
 
     private void show(Player p) {

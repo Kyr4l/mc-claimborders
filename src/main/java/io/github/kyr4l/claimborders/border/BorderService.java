@@ -262,6 +262,9 @@ public final class BorderService implements Listener {
         viewAs.remove(e.getPlayer().getUniqueId());
         viewAsUntil.remove(e.getPlayer().getUniqueId());
         plugin.forgetCooldown(e.getPlayer());
+        if (plugin.zoneMessages() != null) {
+            plugin.zoneMessages().forget(e.getPlayer());
+        }
         if (renderer != null) {
             renderer.clear(e.getPlayer());
         }

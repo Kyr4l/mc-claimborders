@@ -257,6 +257,13 @@ public final class ClaimManager {
         return false;
     }
 
+    /** Flips the claim's zone messages and returns the new state. */
+    public boolean toggleMessages(Claim claim) {
+        claim.setMessagesEnabled(!claim.isMessagesEnabled());
+        markDirty();
+        return claim.isMessagesEnabled();
+    }
+
     public boolean untrust(Claim claim, UUID target) {
         if (claim.removeTrusted(target)) {
             markDirty();
