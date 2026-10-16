@@ -58,21 +58,36 @@ public final class ClaimBordersPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (borders != null) {
-            borders.shutdown();
-            borders = null;
-        }
-        if (entryGuard != null) {
-            entryGuard.shutdown();
-        }
+        // Save first: nothing below may cost us data. Each step is isolated so one failure cannot skip the rest.
+        step("save claims", () -> {
+            if (claims != null) {
+                claims.saveNow();
+            }
+        });
+        step("stop border renderer", () -> {
+            if (borders != null) {
+                borders.shutdown();
+                borders = null;
+            }
+        });
+        step("stop entry guard", () -> {
+            if (entryGuard != null) {
+                entryGuard.shutdown();
+            }
+        });
         HandlerList.unregisterAll(this);
         Bukkit.getScheduler().cancelTasks(this);
-        if (claims != null) {
-            claims.saveNow();
-        }
         lastMessage.clear();
         showToggles.clear();
         getLogger().info("ClaimBorders disabled, claims saved.");
+    }
+
+    private void step(String what, Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException ex) {
+            getLogger().log(java.util.logging.Level.SEVERE, "Failed to " + what + " while disabling", ex);
+        }
     }
 
     /** Re-reads config.yml and restarts the border renderer. Claims stay loaded. */

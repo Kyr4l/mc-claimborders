@@ -38,8 +38,10 @@ public final class BorderService implements Listener {
 
     private final ClaimBordersPlugin plugin;
     private final Set<UUID> showing;
-    /** /claim view: pretend to be this level in every claim (visual only). */
+    /** /claim view: pretend to be this level in every claim (visual only). Expires so it cannot be forgotten. */
     private final Map<UUID, TrustLevel> viewAs = new HashMap<>();
+    private final Map<UUID, Long> viewAsUntil = new HashMap<>();
+    private static final long VIEW_AS_MILLIS = 10L * 60 * 1000;
     private BorderRenderer renderer;
     private BukkitTask task;
     private final Consumer<ClaimManager.ClaimChange> claimListener = change -> {
@@ -74,7 +76,11 @@ public final class BorderService implements Listener {
         HandlerList.unregisterAll(this);
         if (renderer != null) {
             for (Player p : Bukkit.getOnlinePlayers()) {
-                renderer.clear(p);
+                try {
+                    renderer.clear(p);
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning("Could not clear border view of " + p.getName() + ": " + ex.getMessage());
+                }
             }
             renderer.shutdown();
             renderer = null;
@@ -142,10 +148,29 @@ public final class BorderService implements Listener {
     public void setViewAs(Player player, TrustLevel level) {
         if (level == null) {
             viewAs.remove(player.getUniqueId());
+            viewAsUntil.remove(player.getUniqueId());
         } else {
             viewAs.put(player.getUniqueId(), level);
+            viewAsUntil.put(player.getUniqueId(), System.currentTimeMillis() + VIEW_AS_MILLIS);
         }
         refresh(player);
+    }
+
+    /** Ends expired previews and tells the player. Called from the tick. */
+    private void expirePreviews() {
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, Long> entry : new ArrayList<>(viewAsUntil.entrySet())) {
+            if (entry.getValue() > now) {
+                continue;
+            }
+            Player p = Bukkit.getPlayer(entry.getKey());
+            viewAs.remove(entry.getKey());
+            viewAsUntil.remove(entry.getKey());
+            if (p != null) {
+                refresh(p);
+                p.sendMessage(plugin.settings().msg("view-mode", "mode", "off (preview expired)"));
+            }
+        }
     }
 
     /** Re-applies what this player should see (trust changed, world changed...). */
@@ -164,7 +189,9 @@ public final class BorderService implements Listener {
         int radius = renderer.radius();
         List<EdgeView> edges = collectEdges(player, radius);
         long own = edges.stream().filter(EdgeView::trusted).count();
-        return renderer.getClass().getSimpleName() + ": showing=" + isShowing(player) + ", edges within " + radius
+        TrustLevel preview = viewAs.get(player.getUniqueId());
+        return renderer.getClass().getSimpleName() + ": showing=" + isShowing(player)
+                + ", preview=" + (preview == null ? "off" : preview.name().toLowerCase(java.util.Locale.ROOT)) + ", edges within " + radius
                 + " blocks=" + edges.size() + " (own " + own + "), " + renderer.debug(player);
     }
 
@@ -174,6 +201,7 @@ public final class BorderService implements Listener {
         if (renderer == null) {
             return;
         }
+        expirePreviews();
         int radius = renderer.radius();
         for (Player player : Bukkit.getOnlinePlayers()) {
             List<EdgeView> edges = collectEdges(player, radius);
@@ -232,6 +260,7 @@ public final class BorderService implements Listener {
     public void onQuit(PlayerQuitEvent e) {
         showing.remove(e.getPlayer().getUniqueId());
         viewAs.remove(e.getPlayer().getUniqueId());
+        viewAsUntil.remove(e.getPlayer().getUniqueId());
         plugin.forgetCooldown(e.getPlayer());
         if (renderer != null) {
             renderer.clear(e.getPlayer());

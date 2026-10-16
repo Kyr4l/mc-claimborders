@@ -281,6 +281,11 @@ public final class ClaimCommand implements TabExecutor {
     private void show(Player p) {
         boolean now = plugin.borders().toggle(p);
         p.sendMessage(cfg().msg(now ? "show-on" : "show-off"));
+        TrustLevel preview = plugin.borders().getViewAs(p);
+        if (preview != null) {
+            p.sendMessage(Text.color("&ePreview mode is on (&f" + preview.name().toLowerCase(Locale.ROOT)
+                    + "&e), so you see borders as that standing. &f/claim view off&e to return."));
+        }
     }
 
     private boolean admin(CommandSender sender, String[] args) {

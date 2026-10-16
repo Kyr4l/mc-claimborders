@@ -204,7 +204,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             if (!wanted.contains(id)) {
                 Entity e = Bukkit.getEntity(id);
                 if (e != null) {
-                    viewer.hideEntity(plugin, e);
+                    hide(viewer, e);
                 }
                 shown.remove(id);
             }
@@ -213,9 +213,25 @@ public final class DisplayEntityRenderer implements BorderRenderer {
             if (shown.add(id)) {
                 Entity e = Bukkit.getEntity(id);
                 if (e != null) {
-                    viewer.showEntity(plugin, e);
+                    show(viewer, e);
                 }
             }
+        }
+    }
+
+    /**
+     * Bukkit throws if a plugin that is disabling calls hide/showEntity. While disabling we only remove the
+     * entities, which clears every client anyway, so these become no-ops.
+     */
+    private void hide(Player player, Entity e) {
+        if (plugin.isEnabled() && player.isOnline()) {
+            player.hideEntity(plugin, e);
+        }
+    }
+
+    private void show(Player player, Entity e) {
+        if (plugin.isEnabled() && player.isOnline()) {
+            player.showEntity(plugin, e);
         }
     }
 
@@ -228,7 +244,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         for (UUID id : shown) {
             Entity e = Bukkit.getEntity(id);
             if (e != null) {
-                viewer.hideEntity(plugin, e);
+                hide(viewer, e);
             }
         }
     }
@@ -272,9 +288,9 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                 continue;
             }
             if (visible.contains(id)) {
-                player.showEntity(plugin, e);
+                show(player, e);
             } else {
-                player.hideEntity(plugin, e);
+                hide(player, e);
             }
         }
     }
@@ -587,7 +603,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                     run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
             // Hidden from everyone until applyVisibility decides; avoids a flash for players who should not see it.
             for (Player p : Bukkit.getOnlinePlayers()) {
-                p.hideEntity(plugin, d);
+                hide(p, d);
             }
         });
     }
@@ -647,7 +663,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                 t.getPersistentDataContainer().set(tag, PersistentDataType.STRING,
                         run.originChunk().serialize() + ";" + run.side() + ";" + run.length());
                 for (Player p : Bukkit.getOnlinePlayers()) {
-                    p.hideEntity(plugin, t);
+                    hide(p, t);
                 }
             });
             ids.add(d.getUniqueId());
