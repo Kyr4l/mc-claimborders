@@ -6,6 +6,7 @@ import io.github.kyr4l.claimborders.command.ClaimCommand;
 import io.github.kyr4l.claimborders.protect.BlockProtection;
 import io.github.kyr4l.claimborders.protect.EntryGuard;
 import io.github.kyr4l.claimborders.protect.ZoneMessages;
+import io.github.kyr4l.claimborders.util.ConfigUpdater;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
@@ -36,6 +37,9 @@ public final class ClaimBordersPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        if (ConfigUpdater.mergeDefaults(this) > 0) {
+            reloadConfig();
+        }
         settings = new ClaimConfig(getConfig(), getLogger());
         claims = new ClaimManager(this);
         claims.load();
@@ -100,6 +104,7 @@ public final class ClaimBordersPlugin extends JavaPlugin {
 
     /** Re-reads config.yml and restarts the border renderer. Claims stay loaded. */
     public void reload() {
+        ConfigUpdater.mergeDefaults(this);
         reloadConfig();
         settings = new ClaimConfig(getConfig(), getLogger());
         borders.shutdown();

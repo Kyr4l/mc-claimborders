@@ -50,7 +50,8 @@ See [docs/variants.md](docs/variants.md) for the comparison of the border and fo
 
 ## Configuration
 
-`config.yml` is documented inline. The important switches:
+`config.yml` is documented inline. Options added by a newer jar are appended to your existing file (with
+their comments) on startup and on `/claim admin reload`; existing values are never changed. The important switches:
 
 ```yaml
 claims.max-chunks: 16          # default limit
