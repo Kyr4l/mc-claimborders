@@ -672,7 +672,7 @@ public final class DisplayEntityRenderer implements BorderRenderer {
                 t.setText(" ");
                 t.setBackgroundColor(argb);
                 t.setDefaultBackground(false);
-                t.setSeeThrough(false);
+                t.setSeeThrough(cfg.displayTextSeeThrough());
                 t.setShadowed(false);
                 t.setBillboard(Display.Billboard.FIXED);
                 t.setTransformation(new Transformation(translation, rot, scale, new Quaternionf()));

@@ -29,6 +29,16 @@ Common to all modes: teleports into a claim are cancelled (`block-teleports`), v
 outsiders at the line (`block-vehicles`), claiming a chunk ejects intruders (`eject-on-claim`), logging in
 inside a claim ejects too (`eject-on-join`). A player who is already inside a claim can always walk out.
 
+## Display styles
+
+- `BLOCK` (default): scaled glass panes. Opacity is fixed by the texture (about half), rendering is correct in
+  every situation.
+- `TEXT`: flat colour quads with free colour and opacity. Client limitation: a text-display background is drawn
+  immediately and writes depth, so player skins, block-breaking cracks and item frames behind the wall are
+  hidden. `text-see-through: true` removes the depth test instead, which makes the wall visible through terrain.
+  Only a client resource pack (custom item model on an item display) would give free opacity with correct
+  ordering.
+
 ## Previewing
 
 `/claim view member|visitor|outsider` renders every border as if you had that standing, so an owner can check

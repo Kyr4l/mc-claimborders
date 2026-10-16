@@ -73,6 +73,7 @@ public final class ClaimConfig {
 
     private final DisplayStyle displayStyle;
     private final double displayOpacity;
+    private final boolean displayTextSeeThrough;
     private final Color displayColor;
     private final Color displayVisitorColor;
     private final Color displayForeignColor;
@@ -145,6 +146,7 @@ public final class ClaimConfig {
 
         displayStyle = parseEnum(DisplayStyle.class, c.getString("border.display.style"), DisplayStyle.BLOCK, log);
         displayOpacity = Math.max(0.0, Math.min(1.0, c.getDouble("border.display.opacity", 0.35)));
+        displayTextSeeThrough = c.getBoolean("border.display.text-see-through", false);
         displayColor = Text.parseColor(c.getString("border.display.color"), Color.fromRGB(0x4FC3F7));
         displayVisitorColor = Text.parseColor(c.getString("border.display.visitor-color"), Color.fromRGB(0xFFEE58));
         displayForeignColor = Text.parseColor(c.getString("border.display.foreign-color"), Color.fromRGB(0xFF5252));
@@ -279,6 +281,7 @@ public final class ClaimConfig {
 
     public DisplayStyle displayStyle() { return displayStyle; }
     public double displayOpacity() { return displayOpacity; }
+    public boolean displayTextSeeThrough() { return displayTextSeeThrough; }
     public Color displayColor() { return displayColor; }
     public Color displayVisitorColor() { return displayVisitorColor; }
     public Color displayForeignColor() { return displayForeignColor; }

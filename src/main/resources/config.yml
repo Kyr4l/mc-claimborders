@@ -75,10 +75,15 @@ border:
 
   display:
     # BLOCK: panels are scaled block displays using the materials below (opacity is whatever the texture has).
+    #        Renders correctly behind and in front of everything.
     # TEXT : panels are flat colour quads (text display backgrounds) with free colour and opacity.
+    #        Client limitation: the quad hides what is drawn after it behind the wall (player skins,
+    #        block-breaking cracks, item frames). text-see-through: true avoids that but then the wall is
+    #        drawn through terrain and buildings as well. Pick your trade-off.
     style: BLOCK
     # TEXT style only. opacity 0 = invisible, 1 = solid. Colours per standing in the claim.
     opacity: 0.35
+    text-see-through: false
     color: "#4FC3F7"
     visitor-color: "#FFEE58"
     foreign-color: "#FF5252"
