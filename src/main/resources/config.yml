@@ -109,10 +109,10 @@ zone-messages:
   enabled: true
   welcome-depth: 4          # blocks inside the border before members and visitors are welcomed
   approach-distance: 16     # blocks before the border where outsiders are warned (before the push zone)
-  welcome-owner: "&bWelcome home, %player%."
-  welcome: "&bWelcome to %owner%'s land, %player%."
-  welcome-visitor: "&eYou are visiting %owner%'s land. Look, but don't touch."
-  approach: "&c%owner%'s land ahead. You are not allowed in."
+  welcome-owner: "&bAccess granted. Welcome back, %player%."
+  welcome: "&bAccess granted. Entering %owner%'s territory."
+  welcome-visitor: "&eVisitor access granted. %owner%'s territory. Observe only. Do not interfere."
+  approach: "&c&lWARNING&r&c: Restricted area. %owner%'s territory. Entry prohibited."
 
 messages:
   prefix: "&b[Claims]&r "
