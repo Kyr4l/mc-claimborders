@@ -2,6 +2,7 @@ package io.github.kyr4l.claimborders.border;
 
 import io.github.kyr4l.claimborders.claim.ClaimManager;
 import org.bukkit.Chunk;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import java.util.List;
@@ -56,6 +57,10 @@ public interface BorderRenderer {
     }
 
     default void onChunkUnload(Chunk chunk) {
+    }
+
+    /** A chunk's entities finished loading from disk. */
+    default void onEntitiesLoad(List<Entity> entities) {
     }
 
     /** One line of diagnostics for /claim admin stats. */

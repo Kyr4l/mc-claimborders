@@ -20,6 +20,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
@@ -301,6 +302,13 @@ public final class BorderService implements Listener {
     public void onChunkUnload(ChunkUnloadEvent e) {
         if (renderer != null) {
             renderer.onChunkUnload(e.getChunk());
+        }
+    }
+
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent e) {
+        if (renderer != null) {
+            renderer.onEntitiesLoad(e.getEntities());
         }
     }
 

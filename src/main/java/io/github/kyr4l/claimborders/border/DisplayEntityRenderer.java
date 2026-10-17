@@ -356,6 +356,35 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         });
     }
 
+    /**
+     * Panels are non-persistent, but a chunk can be saved while they are alive and some server lineages
+     * write them anyway. When that chunk comes back, the saved copies load as ordinary entities the plugin
+     * does not know about, visible to everyone in every colour. Delete any tagged panel we did not spawn.
+     */
+    @Override
+    public void onEntitiesLoad(List<Entity> loaded) {
+        Set<UUID> ours = null;
+        int removed = 0;
+        for (Entity e : loaded) {
+            if (!(e instanceof Display d) || !d.getPersistentDataContainer().has(tag, PersistentDataType.STRING)) {
+                continue;
+            }
+            if (ours == null) {
+                ours = new HashSet<>();
+                for (Panels panels : entities.values()) {
+                    ours.addAll(panels.all());
+                }
+            }
+            if (!ours.contains(d.getUniqueId())) {
+                d.remove();
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            plugin.getLogger().info("Removed " + removed + " saved border panel(s) that came back with a chunk.");
+        }
+    }
+
     @Override
     public void onChunkUnload(Chunk chunk) {
         ChunkKey key = ChunkKey.of(chunk);
