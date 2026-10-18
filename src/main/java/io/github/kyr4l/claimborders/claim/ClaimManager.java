@@ -257,6 +257,13 @@ public final class ClaimManager {
         return false;
     }
 
+    /** Flips the claim's vanish mode and returns the new state. */
+    public boolean toggleVanish(Claim claim) {
+        claim.setVanishEnabled(!claim.isVanishEnabled());
+        markDirty();
+        return claim.isVanishEnabled();
+    }
+
     /** Flips the claim's zone messages and returns the new state. */
     public boolean toggleMessages(Claim claim) {
         claim.setMessagesEnabled(!claim.isMessagesEnabled());

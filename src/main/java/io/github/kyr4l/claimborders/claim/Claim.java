@@ -24,6 +24,7 @@ public final class Claim {
     private final Map<UUID, Trusted> trusted = new LinkedHashMap<>();
     private final Set<ChunkKey> chunks = new LinkedHashSet<>();
     private boolean messagesEnabled = true;
+    private boolean vanishEnabled = false;
 
     public Claim(UUID owner, String ownerName) {
         this.owner = owner;
@@ -88,6 +89,15 @@ public final class Claim {
 
     void setMessagesEnabled(boolean enabled) {
         this.messagesEnabled = enabled;
+    }
+
+    /** Whether the owner is hidden from everyone while inside this claim. */
+    public boolean isVanishEnabled() {
+        return vanishEnabled;
+    }
+
+    void setVanishEnabled(boolean enabled) {
+        this.vanishEnabled = enabled;
     }
 
     public boolean contains(ChunkKey key) {

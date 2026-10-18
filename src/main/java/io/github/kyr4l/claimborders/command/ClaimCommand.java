@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 public final class ClaimCommand implements TabExecutor {
 
     private static final List<String> SUBS = List.of(
-            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "messages", "admin");
+            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "messages", "vanish", "admin");
 
     private final ClaimBordersPlugin plugin;
 
@@ -76,6 +76,7 @@ public final class ClaimCommand implements TabExecutor {
             case "show" -> show(p);
             case "view" -> view(p, args);
             case "messages" -> messages(p);
+            case "vanish" -> vanish(p);
             default -> help(p);
         }
         return true;
@@ -94,6 +95,7 @@ public final class ClaimCommand implements TabExecutor {
         p.sendMessage(Text.color("&b/claim show &7- toggle your border display"));
         p.sendMessage(Text.color("&b/claim view member|visitor|outsider|off &7- preview how borders look for that level"));
         p.sendMessage(Text.color("&b/claim messages &7- toggle the welcome / keep-out messages of your claim"));
+        p.sendMessage(Text.color("&b/claim vanish &7- hide from everyone while inside your claim"));
         if (p.hasPermission("claimborders.admin")) {
             p.sendMessage(Text.color("&b/claim admin unclaim|unclaimall <player>|reload|stats"));
         }
@@ -288,6 +290,24 @@ public final class ClaimCommand implements TabExecutor {
         }
         boolean on = claims().toggleMessages(claim);
         p.sendMessage(cfg().msg(on ? "messages-on" : "messages-off"));
+    }
+
+    private void vanish(Player p) {
+        if (!p.hasPermission("claimborders.vanish")) {
+            p.sendMessage(Text.color("&cYou may not use vanish."));
+            return;
+        }
+        if (!cfg().vanishEnabled()) {
+            p.sendMessage(Text.color("&cVanish is disabled on this server."));
+            return;
+        }
+        Claim claim = claims().getClaimOf(p.getUniqueId());
+        if (claim == null) {
+            p.sendMessage(Text.color("&cYou do not own any chunk yet. Claim one first."));
+            return;
+        }
+        boolean on = claims().toggleVanish(claim);
+        p.sendMessage(cfg().msg(on ? "vanish-on" : "vanish-off"));
     }
 
     private void show(Player p) {

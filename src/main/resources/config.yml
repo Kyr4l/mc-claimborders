@@ -108,6 +108,13 @@ border:
     reveal: NEAR
     reveal-radius: 24
 
+# Vanish: an owner who ran /claim vanish is hidden from everyone while inside their own claim (entity and
+# tab-list entry removed per viewer, "vanished" metadata set for tab-list/map plugins). Players with the
+# permission claimborders.vanish.see still see them.
+vanish:
+  enabled: true
+  hide-join-quit-messages: true   # no join/quit broadcast when the owner logs in or out inside the claim
+
 # Short lines above the hotbar (action bar) when players reach, enter or leave a claim. Owners toggle
 # them per claim with /claim messages. %owner% and %player% are replaced. Empty string = no message.
 zone-messages:
@@ -138,6 +145,10 @@ messages:
   view-mode: "&7Border preview: &f%mode%"
   untrusted: "&e%player% is no longer trusted."
   ejected: "&eYou were moved out of &f%owner%&e's claim."
+  vanish-on: "&aVanish enabled: you are hidden from everyone while inside your claim."
+  vanish-off: "&7Vanish disabled."
+  vanish-now-hidden: "&7You are now hidden."
+  vanish-now-visible: "&7You are visible again."
   messages-on: "&aZone messages enabled for your claim."
   messages-off: "&7Zone messages disabled for your claim."
   show-on: "&aClaim borders shown."

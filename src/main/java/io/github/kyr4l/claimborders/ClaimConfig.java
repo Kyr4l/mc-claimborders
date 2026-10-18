@@ -89,6 +89,8 @@ public final class ClaimConfig {
     private final RevealMode displayReveal;
     private final int displayRevealRadius;
 
+    private final boolean vanishEnabled;
+    private final boolean vanishHideJoinQuit;
     private final boolean zoneMessagesEnabled;
     private final double welcomeDepth;
     private final double approachDistance;
@@ -170,6 +172,8 @@ public final class ClaimConfig {
         displayReveal = parseEnum(RevealMode.class, c.getString("border.display.reveal"), RevealMode.NEAR, log);
         displayRevealRadius = Math.max(4, c.getInt("border.display.reveal-radius", 24));
 
+        vanishEnabled = c.getBoolean("vanish.enabled", true);
+        vanishHideJoinQuit = c.getBoolean("vanish.hide-join-quit-messages", true);
         zoneMessagesEnabled = c.getBoolean("zone-messages.enabled", true);
         welcomeDepth = Math.max(0, c.getDouble("zone-messages.welcome-depth", 4));
         approachDistance = Math.max(1, c.getDouble("zone-messages.approach-distance", 16));
@@ -222,6 +226,8 @@ public final class ClaimConfig {
         return Text.format(prefix + messages.getOrDefault(key, "&c<" + key + ">"), ph);
     }
 
+    public boolean vanishEnabled() { return vanishEnabled; }
+    public boolean vanishHideJoinQuit() { return vanishHideJoinQuit; }
     public boolean zoneMessagesEnabled() { return zoneMessagesEnabled; }
     public double welcomeDepth() { return welcomeDepth; }
     public double approachDistance() { return approachDistance; }

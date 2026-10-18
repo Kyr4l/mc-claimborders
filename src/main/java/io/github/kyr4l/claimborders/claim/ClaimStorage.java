@@ -71,6 +71,9 @@ public final class ClaimStorage {
         if (o.has("messages")) {
             claim.setMessagesEnabled(o.get("messages").getAsBoolean());
         }
+        if (o.has("vanish")) {
+            claim.setVanishEnabled(o.get("vanish").getAsBoolean());
+        }
         if (o.has("trusted")) {
             for (JsonElement t : o.getAsJsonArray("trusted")) {
                 try {
@@ -105,6 +108,7 @@ public final class ClaimStorage {
             o.addProperty("owner", claim.getOwner().toString());
             o.addProperty("ownerName", claim.getOwnerName());
             o.addProperty("messages", claim.isMessagesEnabled());
+            o.addProperty("vanish", claim.isVanishEnabled());
             JsonArray trusted = new JsonArray();
             claim.getTrusted().forEach((id, entry) -> {
                 JsonObject t = new JsonObject();
