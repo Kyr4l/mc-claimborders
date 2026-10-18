@@ -59,6 +59,8 @@ public final class ClaimConfig {
     private final Color particleColor;
     private final Color particleForeignColor;
     private final Color particleVisitorColor;
+    private final Color particleLockdownColor;
+    private final Color particleLockdownForeignColor;
     private final float particleSize;
     private final double particleStep;
     private final List<Integer> particleLayers;
@@ -77,6 +79,10 @@ public final class ClaimConfig {
     private final Color displayColor;
     private final Color displayVisitorColor;
     private final Color displayForeignColor;
+    private final Color displayLockdownColor;
+    private final Color displayLockdownForeignColor;
+    private final Material displayLockdownMaterial;
+    private final Material displayLockdownForeignMaterial;
     private final Material displayMaterial;
     private final Material displayForeignMaterial;
     private final Material displayVisitorMaterial;
@@ -133,6 +139,8 @@ public final class ClaimConfig {
         particleColor = Text.parseColor(c.getString("border.particles.color"), Color.fromRGB(0x4FC3F7));
         particleForeignColor = Text.parseColor(c.getString("border.particles.foreign-color"), Color.fromRGB(0xFF5252));
         particleVisitorColor = Text.parseColor(c.getString("border.particles.visitor-color"), Color.fromRGB(0xFFEE58));
+        particleLockdownColor = Text.parseColor(c.getString("border.particles.lockdown-color"), Color.fromRGB(0xFFFFFF));
+        particleLockdownForeignColor = Text.parseColor(c.getString("border.particles.lockdown-foreign-color"), Color.fromRGB(0x202020));
         particleSize = (float) c.getDouble("border.particles.size", 1.3);
         particleStep = Math.max(0.25, c.getDouble("border.particles.step", 1.0));
         List<Integer> layers = c.getIntegerList("border.particles.layers");
@@ -152,6 +160,10 @@ public final class ClaimConfig {
         displayColor = Text.parseColor(c.getString("border.display.color"), Color.fromRGB(0x4FC3F7));
         displayVisitorColor = Text.parseColor(c.getString("border.display.visitor-color"), Color.fromRGB(0xFFEE58));
         displayForeignColor = Text.parseColor(c.getString("border.display.foreign-color"), Color.fromRGB(0xFF5252));
+        displayLockdownColor = Text.parseColor(c.getString("border.display.lockdown-color"), Color.fromRGB(0xFFFFFF));
+        displayLockdownForeignColor = Text.parseColor(c.getString("border.display.lockdown-foreign-color"), Color.fromRGB(0x101010));
+        displayLockdownMaterial = parseMaterial(c.getString("border.display.lockdown-material"), Material.WHITE_STAINED_GLASS_PANE, log);
+        displayLockdownForeignMaterial = parseMaterial(c.getString("border.display.lockdown-foreign-material"), Material.BLACK_STAINED_GLASS_PANE, log);
         displayMaterial = parseMaterial(c.getString("border.display.material"), Material.LIGHT_BLUE_STAINED_GLASS_PANE, log);
         displayForeignMaterial = parseMaterial(c.getString("border.display.foreign-material"), Material.RED_STAINED_GLASS_PANE, log);
         displayVisitorMaterial = parseMaterial(c.getString("border.display.visitor-material"), Material.YELLOW_STAINED_GLASS_PANE, log);
@@ -273,6 +285,8 @@ public final class ClaimConfig {
     public Color particleColor() { return particleColor; }
     public Color particleForeignColor() { return particleForeignColor; }
     public Color particleVisitorColor() { return particleVisitorColor; }
+    public Color particleLockdownColor() { return particleLockdownColor; }
+    public Color particleLockdownForeignColor() { return particleLockdownForeignColor; }
     public float particleSize() { return particleSize; }
     public double particleStep() { return particleStep; }
     public List<Integer> particleLayers() { return particleLayers; }
@@ -291,6 +305,10 @@ public final class ClaimConfig {
     public Color displayColor() { return displayColor; }
     public Color displayVisitorColor() { return displayVisitorColor; }
     public Color displayForeignColor() { return displayForeignColor; }
+    public Color displayLockdownColor() { return displayLockdownColor; }
+    public Color displayLockdownForeignColor() { return displayLockdownForeignColor; }
+    public Material displayLockdownMaterial() { return displayLockdownMaterial; }
+    public Material displayLockdownForeignMaterial() { return displayLockdownForeignMaterial; }
     public Material displayMaterial() { return displayMaterial; }
     public Material displayForeignMaterial() { return displayForeignMaterial; }
     public Material displayVisitorMaterial() { return displayVisitorMaterial; }

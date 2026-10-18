@@ -3,6 +3,7 @@ package io.github.kyr4l.claimborders.border;
 import io.github.kyr4l.claimborders.ClaimBordersPlugin;
 import io.github.kyr4l.claimborders.ClaimConfig;
 import io.github.kyr4l.claimborders.claim.BoundaryEdge;
+import io.github.kyr4l.claimborders.claim.TrustLevel;
 import io.github.kyr4l.claimborders.util.ParticleResolver;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -30,6 +31,8 @@ public final class ParticleRenderer implements BorderRenderer {
     private final Particle particle;
     private final Object ownData;
     private final Object visitorData;
+    private final Object lockOwnerData;
+    private final Object lockOtherData;
     private final Object foreignData;
 
     public ParticleRenderer(ClaimBordersPlugin plugin) {
@@ -47,10 +50,14 @@ public final class ParticleRenderer implements BorderRenderer {
         if (particle.getDataType() == Particle.DustOptions.class) {
             ownData = new Particle.DustOptions(cfg.particleColor(), cfg.particleSize());
             visitorData = new Particle.DustOptions(cfg.particleVisitorColor(), cfg.particleSize());
+            lockOwnerData = new Particle.DustOptions(cfg.particleLockdownColor(), cfg.particleSize());
+            lockOtherData = new Particle.DustOptions(cfg.particleLockdownForeignColor(), cfg.particleSize());
             foreignData = new Particle.DustOptions(cfg.particleForeignColor(), cfg.particleSize());
         } else {
             ownData = null;
             visitorData = null;
+            lockOwnerData = null;
+            lockOtherData = null;
             foreignData = null;
         }
     }
@@ -81,11 +88,13 @@ public final class ParticleRenderer implements BorderRenderer {
 
         for (EdgeView view : lines.values()) {
             BoundaryEdge edge = view.edge();
-            Object data = switch (view.level()) {
-                case MEMBER -> ownData;
-                case VISITOR -> visitorData;
-                case NONE -> foreignData;
-            };
+            Object data = view.lockdown()
+                    ? (view.level() == TrustLevel.MEMBER ? lockOwnerData : lockOtherData)
+                    : switch (view.level()) {
+                        case MEMBER -> ownData;
+                        case VISITOR -> visitorData;
+                        case NONE -> foreignData;
+                    };
             for (int layer : cfg.particleLayers()) {
                 double y = Math.floor(py) + layer + 0.1;
                 if (edge.alongX()) {

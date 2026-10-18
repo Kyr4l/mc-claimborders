@@ -1,5 +1,6 @@
 package io.github.kyr4l.claimborders.border;
 
+import io.github.kyr4l.claimborders.claim.Claim;
 import io.github.kyr4l.claimborders.claim.ClaimManager;
 import org.bukkit.Chunk;
 import org.bukkit.entity.Entity;
@@ -51,6 +52,10 @@ public interface BorderRenderer {
     }
 
     default void onClaimChange(ClaimManager.ClaimChange change) {
+    }
+
+    /** The claim's look changed without its shape changing (lockdown toggled): rebuild what is shown. */
+    default void onClaimRestyle(Claim claim) {
     }
 
     default void onChunkLoad(Chunk chunk) {

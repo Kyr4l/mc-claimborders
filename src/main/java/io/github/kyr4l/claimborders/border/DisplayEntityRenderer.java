@@ -386,6 +386,16 @@ public final class DisplayEntityRenderer implements BorderRenderer {
     }
 
     @Override
+    public void onClaimRestyle(Claim claim) {
+        for (Run run : new ArrayList<>(runsByOwner.getOrDefault(claim.getOwner(), Set.of()))) {
+            despawnRun(run);
+            if (run.originChunk().isLoaded()) {
+                spawnRun(run);
+            }
+        }
+    }
+
+    @Override
     public void onChunkUnload(Chunk chunk) {
         ChunkKey key = ChunkKey.of(chunk);
         Claim claim = plugin.claims().getClaimAt(key);
@@ -602,9 +612,14 @@ public final class DisplayEntityRenderer implements BorderRenderer {
         Location loc = new Location(world, ox, originY, oz);
         Claim claim = plugin.claims().getClaimOf(run.owner());
         Map<Object, List<UUID>> byLook = new HashMap<>();
-        List<Object> looks = cfg.displayStyle() == ClaimConfig.DisplayStyle.TEXT
-                ? List.of(cfg.displayColor(), cfg.displayVisitorColor(), cfg.displayForeignColor())
-                : List.of(cfg.displayMaterial(), cfg.displayVisitorMaterial(), cfg.displayForeignMaterial());
+        boolean lock = claim != null && claim.isLockdown();
+        boolean text = cfg.displayStyle() == ClaimConfig.DisplayStyle.TEXT;
+        // Lockdown: white for the owner, black for everyone else (visitor slot included).
+        List<Object> looks = lock
+                ? (text ? List.of(cfg.displayLockdownColor(), cfg.displayLockdownForeignColor(), cfg.displayLockdownForeignColor())
+                        : List.of(cfg.displayLockdownMaterial(), cfg.displayLockdownForeignMaterial(), cfg.displayLockdownForeignMaterial()))
+                : (text ? List.of(cfg.displayColor(), cfg.displayVisitorColor(), cfg.displayForeignColor())
+                        : List.of(cfg.displayMaterial(), cfg.displayVisitorMaterial(), cfg.displayForeignMaterial()));
         for (Object look : looks) {
             byLook.computeIfAbsent(look, l -> l instanceof Material m
                     ? List.of(spawnPanel(world, loc, run, m, x0, z0, lenX, lenZ, minY, height, cullWidth, cullHeight).getUniqueId())

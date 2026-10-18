@@ -108,7 +108,7 @@ public final class ZoneMessages {
             }
             if (nearest != null && nearestDist <= cfg.approachDistance()) {
                 if (!nearest.getOwner().equals(state.approached)) {
-                    Text.actionBar(p, cfg.zoneMsg("approach", nearest, p));
+                    Text.actionBar(p, cfg.zoneMsg(nearest.isLockdown() ? "approach-lockdown" : "approach", nearest, p));
                     state.approached = nearest.getOwner();
                 }
             } else if (nearest == null || nearestDist > cfg.approachDistance() + 8) {

@@ -25,6 +25,7 @@ public final class Claim {
     private final Set<ChunkKey> chunks = new LinkedHashSet<>();
     private boolean messagesEnabled = true;
     private boolean vanishEnabled = false;
+    private boolean lockdown = false;
 
     public Claim(UUID owner, String ownerName) {
         this.owner = owner;
@@ -60,6 +61,9 @@ public final class Claim {
         if (owner.equals(id)) {
             return TrustLevel.MEMBER;
         }
+        if (lockdown) {
+            return TrustLevel.NONE;     // lockdown ignores the trust list: only the owner has any standing
+        }
         Trusted t = trusted.get(id);
         return t == null ? TrustLevel.NONE : t.level();
     }
@@ -89,6 +93,15 @@ public final class Claim {
 
     void setMessagesEnabled(boolean enabled) {
         this.messagesEnabled = enabled;
+    }
+
+    /** Lockdown: nobody but the owner may enter or act, whatever the trust list says. */
+    public boolean isLockdown() {
+        return lockdown;
+    }
+
+    void setLockdown(boolean lockdown) {
+        this.lockdown = lockdown;
     }
 
     /** Whether the owner is hidden from everyone while inside this claim. */

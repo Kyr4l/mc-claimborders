@@ -174,6 +174,13 @@ public final class BorderService implements Listener {
         }
     }
 
+    /** Rebuilds the visuals of one claim after its look changed (lockdown toggled). */
+    public void restyle(Claim claim) {
+        if (renderer != null) {
+            renderer.onClaimRestyle(claim);
+        }
+    }
+
     /** Re-applies what this player should see (trust changed, world changed...). */
     public void refresh(Player player) {
         if (renderer != null) {

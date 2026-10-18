@@ -13,4 +13,9 @@ public record EdgeView(BoundaryEdge edge, Claim claim, TrustLevel level) {
     public boolean trusted() {
         return level == TrustLevel.MEMBER;
     }
+
+    /** The claim is sealed: owner look versus everyone-else look, whatever the levels say. */
+    public boolean lockdown() {
+        return claim != null && claim.isLockdown();
+    }
 }

@@ -257,6 +257,13 @@ public final class ClaimManager {
         return false;
     }
 
+    /** Flips the claim's lockdown and returns the new state. */
+    public boolean toggleLockdown(Claim claim) {
+        claim.setLockdown(!claim.isLockdown());
+        markDirty();
+        return claim.isLockdown();
+    }
+
     /** Flips the claim's vanish mode and returns the new state. */
     public boolean toggleVanish(Claim claim) {
         claim.setVanishEnabled(!claim.isVanishEnabled());
