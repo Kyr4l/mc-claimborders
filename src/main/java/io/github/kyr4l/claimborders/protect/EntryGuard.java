@@ -43,11 +43,39 @@ public final class EntryGuard implements Listener {
     /** Players we made glow (visitors inside a claim); only these get un-glowed by us. */
     private final Set<UUID> glowing = new HashSet<>();
     private BukkitTask glowTask;
+    private BukkitTask sweepTask;
+    /** Earliest time we try to eject this player again (short after a success, long after a failure). */
+    private final java.util.Map<UUID, Long> nextEject = new java.util.HashMap<>();
 
     public EntryGuard(ClaimBordersPlugin plugin) {
         this.plugin = plugin;
         plugin.claims().addListener(this::onClaimChange);
         glowTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateGlow, 20L, 10L);
+        sweepTask = Bukkit.getScheduler().runTaskTimer(plugin, this::sweepLockdown, 40L, 20L);
+    }
+
+    /**
+     * Lockdown: nobody but the owner may stay inside. Moves out whoever the one-time eject missed or could not
+     * place (no loaded free chunk nearby, joined or respawned inside, teleported in by a non-player cause).
+     */
+    private void sweepLockdown() {
+        if (!cfg().forceFieldEnabled()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            Claim claim = plugin.claims().getClaimAt(p.getLocation());
+            if (claim == null || !claim.isLockdown() || claim.canEnter(p) || exempt(p)) {
+                continue;
+            }
+            Long due = nextEject.get(p.getUniqueId());
+            if (due != null && due > now) {
+                continue;
+            }
+            boolean ok = eject(p, claim);
+            nextEject.put(p.getUniqueId(), now + (ok ? 3000L : 30000L));
+        }
+        nextEject.keySet().removeIf(id -> Bukkit.getPlayer(id) == null);
     }
 
     /** Visitors glow while inside a claim they are only allowed to visit. */
@@ -81,6 +109,11 @@ public final class EntryGuard implements Listener {
             glowTask.cancel();
             glowTask = null;
         }
+        if (sweepTask != null) {
+            sweepTask.cancel();
+            sweepTask = null;
+        }
+        nextEject.clear();
         for (UUID id : glowing) {
             Player p = Bukkit.getPlayer(id);
             if (p != null) {
@@ -326,16 +359,21 @@ public final class EntryGuard implements Listener {
         }
     }
 
-    public void eject(Player p, Claim claim) {
+    /** Moves the player to a safe spot outside. Returns false (and logs) if no such spot could be found. */
+    public boolean eject(Player p, Claim claim) {
         Location safe = findSafeOutside(p);
         if (safe == null) {
-            return;
+            plugin.getLogger().warning("Could not find a safe spot outside " + claim.getOwnerName() + "'s claim for "
+                    + p.getName() + " at " + p.getLocation().getBlockX() + ", " + p.getLocation().getBlockY() + ", "
+                    + p.getLocation().getBlockZ() + " (no loaded free chunk within 24 chunks). Will retry.");
+            return false;
         }
         if (p.isInsideVehicle()) {
             p.leaveVehicle();
         }
         p.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN);
         p.sendMessage(cfg().msg("ejected", "owner", claim.getOwnerName()));
+        return true;
     }
 
     /**
@@ -350,7 +388,7 @@ public final class EntryGuard implements Listener {
             return null;
         }
         ChunkKey center = ChunkKey.of(origin);
-        for (int ring = 1; ring <= 10; ring++) {
+        for (int ring = 1; ring <= 24; ring++) {
             for (int dx = -ring; dx <= ring; dx++) {
                 for (int dz = -ring; dz <= ring; dz++) {
                     if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) {
