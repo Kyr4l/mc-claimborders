@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 public final class ClaimCommand implements TabExecutor {
 
     private static final List<String> SUBS = List.of(
-            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "messages", "vanish", "lockdown", "admin");
+            "help", "unclaim", "unclaimall", "trust", "untrust", "trustlist", "info", "list", "map", "show", "view", "messages", "vanish", "lockdown", "open", "admin");
 
     private final ClaimBordersPlugin plugin;
 
@@ -78,6 +78,7 @@ public final class ClaimCommand implements TabExecutor {
             case "messages" -> messages(p);
             case "vanish" -> vanish(p);
             case "lockdown" -> lockdown(p);
+            case "open" -> open(p);
             default -> help(p);
         }
         return true;
@@ -98,6 +99,7 @@ public final class ClaimCommand implements TabExecutor {
         p.sendMessage(Text.color("&b/claim messages &7- toggle the welcome / keep-out messages of your claim"));
         p.sendMessage(Text.color("&b/claim vanish &7- hide from everyone while inside your claim"));
         p.sendMessage(Text.color("&b/claim lockdown &7- seal your claim: only you may enter, trust list ignored"));
+        p.sendMessage(Text.color("&b/claim open &7- open borders: everyone may enter as a read-only visitor"));
         if (p.hasPermission("claimborders.admin")) {
             p.sendMessage(Text.color("&b/claim admin unclaim|unclaimall <player>|reload|stats"));
         }
@@ -292,6 +294,35 @@ public final class ClaimCommand implements TabExecutor {
         }
         boolean on = claims().toggleMessages(claim);
         p.sendMessage(cfg().msg(on ? "messages-on" : "messages-off"));
+    }
+
+    private void open(Player p) {
+        if (!p.hasPermission("claimborders.open")) {
+            p.sendMessage(Text.color("&cYou may not use open borders."));
+            return;
+        }
+        Claim claim = claims().getClaimOf(p.getUniqueId());
+        if (claim == null) {
+            p.sendMessage(Text.color("&cYou do not own any chunk yet. Claim one first."));
+            return;
+        }
+        boolean on = claims().toggleOpen(claim);
+        if (!on) {
+            // Strangers who walked in lose their access: move them back out.
+            for (Player other : Bukkit.getOnlinePlayers()) {
+                if (claims().getClaimAt(other.getLocation()) == claim && !claim.canEnter(other)
+                        && !other.hasPermission("claimborders.bypass")) {
+                    plugin.entryGuard().eject(other, claim);
+                }
+            }
+        }
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            plugin.borders().refresh(online);
+        }
+        p.sendMessage(cfg().msg(on ? "open-on" : "open-off"));
+        if (on && claim.isLockdown()) {
+            p.sendMessage(Text.color("&7Lockdown is on, so the claim stays sealed until you lift it."));
+        }
     }
 
     private void lockdown(Player p) {

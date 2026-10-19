@@ -257,6 +257,13 @@ public final class ClaimManager {
         return false;
     }
 
+    /** Flips the claim's open-borders mode and returns the new state. */
+    public boolean toggleOpen(Claim claim) {
+        claim.setOpenBorders(!claim.isOpenBorders());
+        markDirty();
+        return claim.isOpenBorders();
+    }
+
     /** Flips the claim's lockdown and returns the new state. */
     public boolean toggleLockdown(Claim claim) {
         claim.setLockdown(!claim.isLockdown());

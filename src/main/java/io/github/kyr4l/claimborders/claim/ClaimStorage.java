@@ -77,6 +77,9 @@ public final class ClaimStorage {
         if (o.has("lockdown")) {
             claim.setLockdown(o.get("lockdown").getAsBoolean());
         }
+        if (o.has("open")) {
+            claim.setOpenBorders(o.get("open").getAsBoolean());
+        }
         if (o.has("trusted")) {
             for (JsonElement t : o.getAsJsonArray("trusted")) {
                 try {
@@ -113,6 +116,7 @@ public final class ClaimStorage {
             o.addProperty("messages", claim.isMessagesEnabled());
             o.addProperty("vanish", claim.isVanishEnabled());
             o.addProperty("lockdown", claim.isLockdown());
+            o.addProperty("open", claim.isOpenBorders());
             JsonArray trusted = new JsonArray();
             claim.getTrusted().forEach((id, entry) -> {
                 JsonObject t = new JsonObject();

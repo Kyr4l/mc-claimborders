@@ -26,6 +26,7 @@ public final class Claim {
     private boolean messagesEnabled = true;
     private boolean vanishEnabled = false;
     private boolean lockdown = false;
+    private boolean openBorders = false;
 
     public Claim(UUID owner, String ownerName) {
         this.owner = owner;
@@ -65,7 +66,10 @@ public final class Claim {
             return TrustLevel.NONE;     // lockdown ignores the trust list: only the owner has any standing
         }
         Trusted t = trusted.get(id);
-        return t == null ? TrustLevel.NONE : t.level();
+        if (t == null) {
+            return openBorders ? TrustLevel.VISITOR : TrustLevel.NONE;   // open borders: strangers are visitors
+        }
+        return t.level();
     }
 
     public TrustLevel levelOf(Player player) {
@@ -93,6 +97,15 @@ public final class Claim {
 
     void setMessagesEnabled(boolean enabled) {
         this.messagesEnabled = enabled;
+    }
+
+    /** Open borders: anyone may enter as a read-only visitor (members keep full access). Lockdown overrides it. */
+    public boolean isOpenBorders() {
+        return openBorders;
+    }
+
+    void setOpenBorders(boolean openBorders) {
+        this.openBorders = openBorders;
     }
 
     /** Lockdown: nobody but the owner may enter or act, whatever the trust list says. */

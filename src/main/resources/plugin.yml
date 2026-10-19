@@ -8,7 +8,7 @@ description: Claim chunks one by one and protect them behind a visible force fie
 commands:
   claim:
     description: Claim the chunk you stand in, or manage your claim.
-    usage: /<command> [help|unclaim|unclaimall|trust|untrust|trustlist|info|list|map|show|view|messages|vanish|lockdown|admin]
+    usage: /<command> [help|unclaim|unclaimall|trust|untrust|trustlist|info|list|map|show|view|messages|vanish|lockdown|open|admin]
     aliases: [claims, cb]
   unclaim:
     description: Unclaim the chunk you stand in.
@@ -30,6 +30,9 @@ permissions:
   claimborders.bypass:
     description: Walk through force fields and ignore claim protection.
     default: op
+  claimborders.open:
+    description: Use /claim open to let everyone in as read-only visitors.
+    default: true
   claimborders.lockdown:
     description: Use /claim lockdown to seal your own claim.
     default: true

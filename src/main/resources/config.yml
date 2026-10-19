@@ -154,6 +154,8 @@ messages:
   view-mode: "&7Border preview: &f%mode%"
   untrusted: "&e%player% is no longer trusted."
   ejected: "&eYou were moved out of &f%owner%&e's claim."
+  open-on: "&aOpen borders: everyone may enter your claim as a read-only visitor."
+  open-off: "&7Open borders closed: only trusted players may enter."
   lockdown-on: "&cLockdown enabled: only you may enter your claim. Everyone else was moved out."
   lockdown-off: "&aLockdown lifted: the trust list applies again."
   vanish-on: "&aVanish enabled: you are hidden from everyone while inside your claim."
